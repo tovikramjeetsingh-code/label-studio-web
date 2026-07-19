@@ -132,7 +132,7 @@
     const isBad = (r) => req.some((c) => !r[c]);
     const notes = [];
     if (enriched) notes.push('<div class="toast ok-toast">🔎 ' + enriched +
-      " row(s) auto-completed from the stored listings.</div>");
+      " row(s) completed / corrected from the stored listings (size kept from your file).</div>");
     if (problems && problems.length) {
       const list = problems.slice(0, 8).map((p) => "row " + p.row + " (missing: " + p.missing.join(", ") + ")").join("; ");
       notes.push('<div class="toast warn">⚠ ' + problems.length +

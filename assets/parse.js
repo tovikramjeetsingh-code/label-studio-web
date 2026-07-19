@@ -68,34 +68,43 @@
   // ---- stored reference (master) ----
   const master = () => window.LABEL_MASTER || null;
 
+  // Match a row to the reference by SKU code (barcode) first, then seller sku code.
   function masterFind(row) {
     const m = master(); if (!m) return null;
-    const ss = (row["seller sku code"] || "").trim().toLowerCase();
     const sk = (row["sku code"] || "").trim().toLowerCase();
-    let idx = (ss && ss in m.bySeller) ? m.bySeller[ss]
-            : (sk && sk in m.bySku) ? m.bySku[sk] : undefined;
+    const ss = (row["seller sku code"] || "").trim().toLowerCase();
+    let idx = (sk && sk in m.bySku) ? m.bySku[sk]
+            : (ss && ss in m.bySeller) ? m.bySeller[ss] : undefined;
     return idx === undefined ? null : m.records[idx];
   }
 
-  // Fill blank canonical fields from the stored reference; recompute problems.
+  // Reconcile each row against the stored reference: the listing is the source
+  // of truth, so any field that differs is corrected to the listing's value —
+  // EXCEPT size, which is always kept from the upload (only filled if blank).
   function finalize(rows, format) {
-    let enriched = 0;
+    let corrected = 0;
     rows.forEach((row) => {
       const rec = masterFind(row);
       if (rec) {
         let did = false;
         for (const short in CANON_FROM_SHORT) {
           const canon = CANON_FROM_SHORT[short];
-          if (!row[canon] && rec[short]) { row[canon] = rec[short]; did = true; }
+          if (canon === "size") {
+            if (!row[canon] && rec[short]) { row[canon] = rec[short]; did = true; }  // fill only
+          } else if (rec[short] && row[canon] !== rec[short]) {
+            row[canon] = rec[short]; did = true;                                      // correct/override
+          }
         }
-        if (did) enriched++;
+        row._filename = row["seller sku code"];   // follow the corrected seller sku
+        if (did) corrected++;
+      } else if (!row._filename) {
+        row._filename = row["seller sku code"];
       }
       if (!row["month & year of manufacture"]) row["month & year of manufacture"] = currentMonthYear();
-      if (!row._filename) row._filename = row["seller sku code"];
     });
     const problems = [];
     rows.forEach((row) => flagProblems(row, problems));
-    return { rows, problems, format, enriched };
+    return { rows, problems, format, enriched: corrected };
   }
 
   // ---- canonical row builders ----
