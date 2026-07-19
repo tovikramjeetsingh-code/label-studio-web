@@ -14,7 +14,7 @@ Usage:
 Re-run whenever listings change or you rotate the password, then commit + push.
 private_source/ is git-ignored — raw catalogs are never committed.
 """
-import argparse, base64, csv, glob, json, os, datetime, sys
+import argparse, base64, csv, glob, json, os, datetime, re, sys
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -42,8 +42,8 @@ def clean(v):
     s = ("" if v is None else str(v)).strip()
     if s.lower() == "nan":
         return ""
-    if s.endswith(".0") and s[:-2].isdigit():
-        s = s[:-2]
+    if re.fullmatch(r"\d+\.0+", s):   # 1999.0 / 1999.0000 -> 1999
+        s = s.split(".")[0]
     return s
 
 
