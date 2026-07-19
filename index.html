@@ -23,13 +23,28 @@
       <b>① Label Template</b> — brand, article type, style name, style id, size, seller sku code, sku code, mrp, month &amp; year of manufacture<br>
       <b>② Myntra STN Summary</b> — the portal export; Seller SKU = Vendor Article No, Month &amp; Year = current month<br>
       <b>③ Seller Listings Report</b> — the portal listings export; Month &amp; Year = current month<br>
-      Extra columns are ignored. <b>Any other file</b> → you'll be asked to match its columns to the label fields.</div>
+      Extra columns are ignored. <b>Any other file</b> → you'll be asked to match its columns to the label fields.<br>
+      <b>Only have a list of SKUs?</b> Load a reference below, then upload the list — missing details (brand, MRP, style…) are filled in automatically.</div>
     <div id="drop">
       <div class="big">Drop file here or click to browse</div>
       <div class="small">.csv · .xlsx</div>
     </div>
     <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.xlsm">
     <div id="uploadToast"></div>
+  </section>
+
+  <!-- Stored reference (private, in-browser) -->
+  <section class="card" id="refCard">
+    <h2>Stored SKU reference <span class="pill priv-pill">🔒 private · in your browser only</span></h2>
+    <div class="sub">Load your Seller Listings Report(s) once. It's kept only in <b>this browser</b>
+      (never uploaded, never published) and used to auto-fill missing fields on any upload.
+      Send a new listings file? Just load it again to update.</div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <button class="btn ghost" id="refLoadBtn">Load / update reference…</button>
+      <input type="file" id="refInput" accept=".csv,.xlsx,.xls,.xlsm" multiple style="display:none">
+      <a id="refClear" class="hidden" style="color:var(--err);font-size:13px;cursor:pointer;font-weight:600">Clear</a>
+    </div>
+    <div id="masterInfo" style="font-size:12.5px;color:var(--muted);margin-top:10px;"></div>
   </section>
 
   <!-- Fixed values -->

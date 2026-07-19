@@ -12,6 +12,36 @@
   $("fxMfg").textContent = C.MANUFACTURED_BY;
   $("fxCountry").textContent = C.COUNTRY_OF_ORIGIN;
 
+  // stored reference — restore from this browser, wire load/clear
+  window.LabelParse.loadMasterFromStorage();
+  function updateRef() {
+    const meta = window.LabelParse.masterMeta();
+    if (meta && meta.count) {
+      $("masterInfo").innerHTML = "📇 <b>" + meta.count.toLocaleString() + "</b> SKUs loaded (" +
+        esc(meta.sources.join(", ")) + "), updated " + esc(meta.built) + ".";
+      $("refClear").classList.remove("hidden");
+    } else {
+      $("masterInfo").textContent = "No reference loaded — uploads with missing fields can't be auto-filled yet.";
+      $("refClear").classList.add("hidden");
+    }
+  }
+  updateRef();
+  $("refLoadBtn").addEventListener("click", () => $("refInput").click());
+  $("refInput").addEventListener("change", async () => {
+    if (!$("refInput").files.length) return;
+    $("masterInfo").textContent = "Reading reference…";
+    try {
+      const m = await window.LabelParse.buildMasterFromFiles(Array.from($("refInput").files));
+      const saved = window.LabelParse.saveMaster(m);
+      updateRef();
+      if (!saved) $("masterInfo").innerHTML += " <span style='color:var(--warn)'>(too large to remember after closing the tab — kept for this session)</span>";
+    } catch (e) {
+      $("masterInfo").innerHTML = '<span style="color:var(--err)">✕ ' + esc(e.message) + "</span>";
+    }
+    $("refInput").value = "";
+  });
+  $("refClear").addEventListener("click", () => { window.LabelParse.clearMaster(); updateRef(); });
+
   // ---- upload ----
   const drop = $("drop"), fileInput = $("fileInput");
   drop.addEventListener("click", () => fileInput.click());
@@ -40,7 +70,7 @@
     if (res.needsMapping) { renderMapping(file.name, res); return; }
     $("mapCard").classList.add("hidden");
     ROWS = res.rows;
-    renderReview(file.name, res.format, res.problems);
+    renderReview(file.name, res.format, res.problems, res.enriched);
   }
 
   // ---- mapping step ----
@@ -85,25 +115,30 @@
     if (!res.rows.length) { $("mapToast").innerHTML = '<div class="toast err">✕ No data rows after mapping.</div>'; return; }
     $("mapCard").classList.add("hidden");
     ROWS = res.rows;
-    renderReview(window._lastFile, res.format, res.problems);
+    renderReview(window._lastFile, res.format, res.problems, res.enriched);
   });
 
   // ---- review ----
-  function renderReview(filename, format, problems) {
+  function renderReview(filename, format, problems, enriched) {
     $("reviewCard").classList.remove("hidden"); $("genCard").classList.remove("hidden");
     $("fileBadge").textContent = filename + " · " + format + " · " + ROWS.length + " labels";
-    const bad = new Set((problems || []).map((p) => p.row));
+    const req = ["seller sku code", "sku code", "size", "mrp"];
+    const isBad = (r) => req.some((c) => !r[c]);
+    const notes = [];
+    if (enriched) notes.push('<div class="toast ok-toast">🔎 ' + enriched +
+      " row(s) auto-completed from the stored listings.</div>");
     if (problems && problems.length) {
       const list = problems.slice(0, 8).map((p) => "row " + p.row + " (missing: " + p.missing.join(", ") + ")").join("; ");
-      $("problemToast").innerHTML = '<div class="toast warn">⚠ ' + problems.length +
+      notes.push('<div class="toast warn">⚠ ' + problems.length +
         " row(s) have blank required fields — they will still print, check them: " + esc(list) +
-        (problems.length > 8 ? " …" : "") + "</div>";
-    } else $("problemToast").innerHTML = "";
+        (problems.length > 8 ? " …" : "") + "</div>");
+    }
+    $("problemToast").innerHTML = notes.join("");
 
     const tb = $("tbl").querySelector("tbody"); tb.innerHTML = "";
     ROWS.forEach((r, i) => {
       const tr = document.createElement("tr");
-      if (bad.has(i + 2)) tr.classList.add("bad");
+      if (isBad(r)) tr.classList.add("bad");
       tr.innerHTML =
         '<td class="rownum">' + (i + 1) + "</td>" +
         '<td><a class="pv" data-i="' + i + '">Preview</a></td>' +

@@ -52,6 +52,9 @@ tr td a.pv { color: var(--accent); text-decoration: none; font-weight: 600; curs
 .btn.primary { background: var(--accent); color: #fff; }
 .btn.primary:hover { background: var(--accent-dark); }
 .btn.primary:disabled { background: #e2c3d2; cursor: not-allowed; }
+.btn.ghost { background: #fff; color: var(--ink); border: 1px solid #cbd5e1; }
+.btn.ghost:hover { background: #f8fafc; }
+.pill.priv-pill { background: #eef2ff; color: #3730a3; }
 
 .genbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .progress { flex: 1; min-width: 220px; height: 10px; background: #eef0f3; border-radius: 999px; overflow: hidden; display: none; }
@@ -79,3 +82,4 @@ tr td a.pv { color: var(--accent); text-decoration: none; font-weight: 600; curs
 .toast { font-size: 13px; padding: 10px 14px; border-radius: 8px; margin-top: 12px; }
 .toast.err { background: #fee2e2; color: var(--err); }
 .toast.warn { background: #fef3c7; color: #92400e; }
+.toast.ok-toast { background: #dcfce7; color: #166534; }

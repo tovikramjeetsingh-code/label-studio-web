@@ -15,6 +15,22 @@ Three formats auto-detected (same as the original app):
 - **Seller Listings Report** — portal listings export; Month & Year = current month
 - **Anything else** → a "Map columns" step lets you match its columns to the label fields.
 
+## Stored SKU reference (auto-fill missing fields) — private
+
+The catalog is **never bundled or published** (it would be world-readable on
+Pages). Instead each user loads their Seller Listings Report(s) via
+**"Load / update reference"** on the page. The app builds a lookup table and
+keeps it **only in that browser** (`localStorage`) — nothing is uploaded.
+
+On upload, any **blank** label field is filled from this reference by matching
+seller-sku-code / sku-code. You can even upload a bare list of SKU codes and get
+full labels ("SKU lookup" format). A value the file *does* provide is never
+overwritten; SKUs not found are flagged.
+
+- **Per browser/device**: each machine loads the reference once (persists across
+  visits). New listings? Click "Load / update reference" again.
+- **Clear** removes it from that browser.
+
 ## Fixed values
 
 The two statutory addresses and Country of Origin = INDIA live in
