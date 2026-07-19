@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label Studio</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>🏷️ Label Studio</h1>
+  <span>Myntra product stickers · 60 × 83 mm · one PDF per SKU-size</span>
+  <span class="priv">🔒 Runs in your browser — files never leave this device</span>
+</header>
+
+<main>
+  <!-- STEP 1 -->
+  <section class="card">
+    <h2>1 · Upload your file</h2>
+    <div class="sub">CSV or Excel — one row per SKU-size. Three formats are auto-detected:<br>
+      <b>① Label Template</b> — brand, article type, style name, style id, size, seller sku code, sku code, mrp, month &amp; year of manufacture<br>
+      <b>② Myntra STN Summary</b> — the portal export; Seller SKU = Vendor Article No, Month &amp; Year = current month<br>
+      <b>③ Seller Listings Report</b> — the portal listings export; Month &amp; Year = current month<br>
+      Extra columns are ignored. <b>Any other file</b> → you'll be asked to match its columns to the label fields.</div>
+    <div id="drop">
+      <div class="big">Drop file here or click to browse</div>
+      <div class="small">.csv · .xlsx</div>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.xlsm">
+    <div id="uploadToast"></div>
+  </section>
+
+  <!-- Fixed values -->
+  <section class="card">
+    <h2>Fixed on every label</h2>
+    <div class="sub">Preset in the app — not taken from the upload. Edit in <code>assets/config.js</code>.</div>
+    <div class="fixed-grid">
+      <div class="fixed-box"><div class="k">🔒 Designed &amp; Marketed By</div><div class="v" id="fxDesigned"></div></div>
+      <div class="fixed-box"><div class="k">🔒 Manufactured &amp; Packed By</div><div class="v" id="fxMfg"></div></div>
+      <div class="fixed-box"><div class="k">🔒 Country of Origin</div><div class="v" id="fxCountry" style="font-size:15px;font-weight:700;"></div></div>
+    </div>
+  </section>
+
+  <!-- STEP 1b : mapping -->
+  <section class="card hidden" id="mapCard">
+    <h2>Map columns <span class="pill warn" id="mapBadge">new format</span></h2>
+    <div class="sub">This file doesn't match a known format. Pick which column fills each label field — best guesses are pre-selected. Check the sample values.</div>
+    <div id="mapGrid"></div>
+    <div id="mapToast"></div>
+    <div style="margin-top:14px"><button class="btn primary" id="mapBtn">Apply mapping →</button></div>
+  </section>
+
+  <!-- STEP 2 : review -->
+  <section class="card hidden" id="reviewCard">
+    <h2>2 · Review <span id="fileBadge" class="pill ok"></span></h2>
+    <div class="sub">Check the data, preview any label, then generate.</div>
+    <div id="problemToast"></div>
+    <div class="tbl-wrap">
+      <table id="tbl">
+        <thead><tr>
+          <th>#</th><th></th><th>Seller SKU</th><th>SKU Code (barcode)</th><th>Size</th>
+          <th>MRP</th><th>Brand</th><th>Article Type</th><th>Style Name</th><th>Style ID</th><th>Month &amp; Year</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- STEP 3 : generate -->
+  <section class="card hidden" id="genCard">
+    <h2>3 · Generate</h2>
+    <div class="sub">One 60 × 83 mm PDF per row, named by Seller SKU, delivered as a ZIP.</div>
+    <div class="genbar">
+      <button class="btn primary" id="genBtn">Generate labels</button>
+      <div class="progress" id="prog"><div class="fill" id="progFill"></div></div>
+      <span id="genMsg"></span>
+      <button class="btn" id="downloadBtn">⬇ Download ZIP</button>
+    </div>
+  </section>
+</main>
+
+<div id="modal"><div class="box">
+  <h3>Label preview <a id="pvClose">✕</a></h3>
+  <iframe id="pvFrame"></iframe>
+</div></div>
+
+<script src="vendor/papaparse.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/JsBarcode.all.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/parse.js"></script>
+<script src="assets/label.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
