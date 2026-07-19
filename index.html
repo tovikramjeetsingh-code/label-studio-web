@@ -33,18 +33,19 @@
     <div id="uploadToast"></div>
   </section>
 
-  <!-- Stored reference (private, in-browser) -->
+  <!-- Stored reference (encrypted, unlocked with the team password) -->
   <section class="card" id="refCard">
-    <h2>Stored SKU reference <span class="pill priv-pill">🔒 private · in your browser only</span></h2>
-    <div class="sub">Load your Seller Listings Report(s) once. It's kept only in <b>this browser</b>
-      (never uploaded, never published) and used to auto-fill missing fields on any upload.
-      Send a new listings file? Just load it again to update.</div>
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <button class="btn ghost" id="refLoadBtn">Load / update reference…</button>
-      <input type="file" id="refInput" accept=".csv,.xlsx,.xls,.xlsm" multiple style="display:none">
-      <a id="refClear" class="hidden" style="color:var(--err);font-size:13px;cursor:pointer;font-weight:600">Clear</a>
+    <h2>Stored SKU reference <span class="pill priv-pill">🔒 encrypted · unlocked with the team password</span></h2>
+    <div class="sub">Enter the shared team password once on this device to activate the reference.
+      It then fills missing fields (brand, MRP, style…) automatically on every upload — you never
+      upload the listings file itself. The catalog ships encrypted; without the password it's unreadable.</div>
+    <div id="refLocked" class="hidden" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="password" id="refPass" placeholder="Team password"
+             style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;min-width:220px">
+      <button class="btn primary" id="refUnlock">Unlock reference</button>
     </div>
     <div id="masterInfo" style="font-size:12.5px;color:var(--muted);margin-top:10px;"></div>
+    <a id="refClear" class="hidden" style="color:var(--err);font-size:12.5px;cursor:pointer;font-weight:600">Forget on this device</a>
   </section>
 
   <!-- Fixed values -->
@@ -107,6 +108,7 @@
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="assets/config.js"></script>
+<script src="assets/reference.enc.js"></script>
 <script src="assets/parse.js"></script>
 <script src="assets/label.js"></script>
 <script src="assets/app.js"></script>

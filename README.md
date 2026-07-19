@@ -15,21 +15,29 @@ Three formats auto-detected (same as the original app):
 - **Seller Listings Report** — portal listings export; Month & Year = current month
 - **Anything else** → a "Map columns" step lets you match its columns to the label fields.
 
-## Stored SKU reference (auto-fill missing fields) — private
+## Stored SKU reference (auto-fill missing fields) — encrypted, team password
 
-The catalog is **never bundled or published** (it would be world-readable on
-Pages). Instead each user loads their Seller Listings Report(s) via
-**"Load / update reference"** on the page. The app builds a lookup table and
-keeps it **only in that browser** (`localStorage`) — nothing is uploaded.
+The catalog ships **encrypted** in the site (`assets/reference.enc.js`). It's
+public ciphertext — unreadable without the shared **team password**. Each user
+enters that password **once per browser** ("Unlock reference"); the app decrypts
+it locally (Web Crypto, AES-256-GCM) and remembers it, so from then on missing
+label fields are filled automatically in the background. Upload a bare list of
+SKU codes and get full labels ("SKU lookup"); values the file provides are never
+overwritten; unknown SKUs are flagged.
 
-On upload, any **blank** label field is filled from this reference by matching
-seller-sku-code / sku-code. You can even upload a bare list of SKU codes and get
-full labels ("SKU lookup" format). A value the file *does* provide is never
-overwritten; SKUs not found are flagged.
+### Building / updating the encrypted reference
 
-- **Per browser/device**: each machine loads the reference once (persists across
-  visits). New listings? Click "Load / update reference" again.
-- **Clear** removes it from that browser.
+Raw catalogs live in `private_source/` (git-ignored — never committed).
+
+1. Put the Seller Listings Report(s) in `private_source/` (.csv or .xlsx).
+2. `pip install cryptography` (once), then
+   `python3 tools/build_reference.py --password "THE TEAM PASSWORD"`
+3. `git add assets/reference.enc.js && git commit -m "update reference" && git push`
+
+Rotating the password = re-run step 2 with a new password and push (users re-enter
+it once). Only the encrypted `reference.enc.js` is committed; the plaintext
+catalog never leaves your machine.
+
 
 ## Fixed values
 

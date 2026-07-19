@@ -12,35 +12,41 @@
   $("fxMfg").textContent = C.MANUFACTURED_BY;
   $("fxCountry").textContent = C.COUNTRY_OF_ORIGIN;
 
-  // stored reference — restore from this browser, wire load/clear
-  window.LabelParse.loadMasterFromStorage();
+  // stored reference — encrypted bundle, unlocked with the shared team password
   function updateRef() {
     const meta = window.LabelParse.masterMeta();
     if (meta && meta.count) {
-      $("masterInfo").innerHTML = "📇 <b>" + meta.count.toLocaleString() + "</b> SKUs loaded (" +
-        esc(meta.sources.join(", ")) + "), updated " + esc(meta.built) + ".";
+      $("masterInfo").innerHTML = "✅ Reference active — <b>" + meta.count.toLocaleString() +
+        "</b> SKUs (updated " + esc(meta.built) + "). Missing fields are filled automatically.";
+      $("refLocked").classList.add("hidden");
       $("refClear").classList.remove("hidden");
+    } else if (window.LabelParse.hasEncrypted()) {
+      $("masterInfo").textContent = "";
+      $("refLocked").classList.remove("hidden");
+      $("refClear").classList.add("hidden");
     } else {
-      $("masterInfo").textContent = "No reference loaded — uploads with missing fields can't be auto-filled yet.";
+      $("masterInfo").textContent = "No reference is bundled with this site yet.";
+      $("refLocked").classList.add("hidden");
       $("refClear").classList.add("hidden");
     }
   }
-  updateRef();
-  $("refLoadBtn").addEventListener("click", () => $("refInput").click());
-  $("refInput").addEventListener("change", async () => {
-    if (!$("refInput").files.length) return;
-    $("masterInfo").textContent = "Reading reference…";
+  async function doUnlock() {
+    const pass = $("refPass").value;
+    if (!pass) return;
+    $("masterInfo").textContent = "Unlocking…";
     try {
-      const m = await window.LabelParse.buildMasterFromFiles(Array.from($("refInput").files));
-      const saved = window.LabelParse.saveMaster(m);
+      await window.LabelParse.unlockReference(pass);
+      $("refPass").value = "";
       updateRef();
-      if (!saved) $("masterInfo").innerHTML += " <span style='color:var(--warn)'>(too large to remember after closing the tab — kept for this session)</span>";
     } catch (e) {
       $("masterInfo").innerHTML = '<span style="color:var(--err)">✕ ' + esc(e.message) + "</span>";
+      $("refLocked").classList.remove("hidden");
     }
-    $("refInput").value = "";
-  });
-  $("refClear").addEventListener("click", () => { window.LabelParse.clearMaster(); updateRef(); });
+  }
+  (async () => { await window.LabelParse.tryAutoUnlock(); updateRef(); })();
+  $("refUnlock").addEventListener("click", doUnlock);
+  $("refPass").addEventListener("keydown", (e) => { if (e.key === "Enter") doUnlock(); });
+  $("refClear").addEventListener("click", () => { window.LabelParse.forgetPassword(); updateRef(); });
 
   // ---- upload ----
   const drop = $("drop"), fileInput = $("fileInput");

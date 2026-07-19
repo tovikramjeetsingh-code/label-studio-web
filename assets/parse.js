@@ -237,8 +237,48 @@
   }
   function clearMaster() { window.LABEL_MASTER = null; try { localStorage.removeItem(LS_KEY); } catch (e) {} }
 
+  // ---- encrypted bundled reference: unlock with the shared team password ----
+  const PASS_KEY = "labelStudioRefPass_v1";
+  const b64bytes = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+  async function decryptReference(passphrase) {
+    const enc = window.LABEL_ENC;
+    if (!enc) throw new Error("No reference is bundled with this site yet.");
+    const salt = b64bytes(enc.salt), iv = b64bytes(enc.iv), ct = b64bytes(enc.ct);
+    const keyMat = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: enc.iters, hash: "SHA-256" },
+      keyMat, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    let plain;
+    try { plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct); }
+    catch (e) { throw new Error("Wrong password."); }
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  // unlock + remember the password on this browser
+  async function unlockReference(passphrase) {
+    const m = await decryptReference(passphrase);
+    window.LABEL_MASTER = m;
+    try { localStorage.setItem(PASS_KEY, passphrase); } catch (e) {}
+    return m.meta;
+  }
+
+  // silent unlock on load using a previously-entered password
+  async function tryAutoUnlock() {
+    if (!window.LABEL_ENC) return null;
+    let pass; try { pass = localStorage.getItem(PASS_KEY); } catch (e) {}
+    if (!pass) return null;
+    try { const m = await decryptReference(pass); window.LABEL_MASTER = m; return m.meta; }
+    catch (e) { try { localStorage.removeItem(PASS_KEY); } catch (_) {} return null; }  // password rotated
+  }
+
+  const hasEncrypted = () => !!window.LABEL_ENC;
+  function forgetPassword() { window.LABEL_MASTER = null; try { localStorage.removeItem(PASS_KEY); } catch (e) {} }
+
   window.LabelParse = {
     parseUpload, applyMapping, cleanCell, masterMeta,
     buildMasterFromFiles, saveMaster, loadMasterFromStorage, clearMaster,
+    unlockReference, tryAutoUnlock, hasEncrypted, forgetPassword,
   };
 })();
