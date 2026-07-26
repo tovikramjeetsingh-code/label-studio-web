@@ -50,8 +50,7 @@ A toggle at the top switches between:
 
 Upload the Myntra barcode PDF (one item barcode per page). The app reads each
 page's item code, seller SKU and description (via PDF.js), and regenerates each as
-a 50 × 25 mm sticker carrying **both** a **QR (2D)** and a **Code-128 (1D)** — both
-encoding the item code — plus the three text lines. Description is completed from
+a 50 × 25 mm sticker carrying your **chosen** code — a **QR (2D)** *or* a **Code-128 (1D)** (toggle on the page), encoding the item code — plus the three text lines. Description is completed from
 the stored listing when the seller SKU matches. Print/download like product labels.
 Code: [`assets/itemlabel.js`](assets/itemlabel.js) + vendored `pdf.min.js` /
 `pdf.worker.min.js` (read PDF) and `qrcode.min.js` (QR).

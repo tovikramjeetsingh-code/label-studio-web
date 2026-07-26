@@ -31,8 +31,13 @@
       Extra columns are ignored. <b>Any other file</b> → you'll be asked to match its columns to the label fields.<br>
       <b>Only have a list of SKUs?</b> Load a reference below, then upload the list — missing details (brand, MRP, style…) are filled in automatically.</div>
     <div class="sub hidden" id="helpItem">Upload the <b>Myntra system-generated barcode PDF</b> (one item barcode per page).
-      Each item code becomes a 50 × 25 mm sticker with a <b>QR (2D)</b> and a <b>linear barcode (1D)</b> — both encoding the item code —
+      Each item code becomes a 50 × 25 mm sticker with your chosen scannable code (encoding the item code),
       plus the item code, seller SKU and description. Description is completed from your stored listing when the SKU matches.</div>
+    <div class="hidden" id="codeTypeRow" style="margin:2px 0 14px;font-size:13px;display:flex;gap:16px;align-items:center;">
+      <b>Code on the label:</b>
+      <label style="cursor:pointer"><input type="radio" name="codeType" value="barcode" checked> Linear barcode (1D)</label>
+      <label style="cursor:pointer"><input type="radio" name="codeType" value="qr"> QR code (2D)</label>
+    </div>
     <div id="drop">
       <div class="big">Drop file here or click to browse</div>
       <div class="small" id="dropHint">.csv · .xlsx</div>

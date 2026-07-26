@@ -8,9 +8,22 @@
   let MAP_CTX = null;     // stash for the mapping step
   let MODE = "product";   // "product" (60x83) | "item" (50x25 dual-code)
 
-  const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r) : window.LabelRender.buildLabelDoc(r);
-  const buildMulti = (rs) => MODE === "item" ? window.ItemLabel.buildItemDocMulti(rs) : window.LabelRender.buildLabelDocMulti(rs);
+  const ITEMCODE_KEY = "labelStudioItemCode_v1";
+  function itemCodeType() {
+    const el = document.querySelector('input[name="codeType"]:checked');
+    return el ? el.value : (localStorage.getItem(ITEMCODE_KEY) || "barcode");
+  }
+  const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r, itemCodeType()) : window.LabelRender.buildLabelDoc(r);
+  const buildMulti = (rs) => MODE === "item" ? window.ItemLabel.buildItemDocMulti(rs, itemCodeType()) : window.LabelRender.buildLabelDocMulti(rs);
   const labelSize = () => MODE === "item" ? window.ItemLabel.size : { w: 60, h: 83 };
+
+  // restore + persist the item-code type choice
+  (function () {
+    const saved = localStorage.getItem(ITEMCODE_KEY);
+    if (saved) { const el = document.querySelector('input[name="codeType"][value="' + saved + '"]'); if (el) el.checked = true; }
+    document.querySelectorAll('input[name="codeType"]').forEach((r) =>
+      r.addEventListener("change", () => { if (r.checked) localStorage.setItem(ITEMCODE_KEY, r.value); }));
+  })();
 
   function setMode(mode) {
     if (mode === MODE) return;
@@ -18,6 +31,7 @@
     document.querySelectorAll(".modebtn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
     $("helpProduct").classList.toggle("hidden", mode !== "product");
     $("helpItem").classList.toggle("hidden", mode !== "item");
+    $("codeTypeRow").classList.toggle("hidden", mode !== "item");
     $("dropHint").textContent = mode === "item" ? ".pdf" : ".csv · .xlsx";
     $("fileInput").accept = mode === "item" ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
     ROWS = [];

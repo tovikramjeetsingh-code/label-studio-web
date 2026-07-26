@@ -79,44 +79,47 @@
     return cv.toDataURL("image/png");
   }
 
-  // ---- render one 50x25mm dual-code label ----
-  function drawItem(doc, rec) {
+  // ---- render one 50x25mm label with the CHOSEN code (codeType: "qr" | "barcode") ----
+  function drawItem(doc, rec, codeType) {
     const item = String(rec["item code"] || "");
     const sku = String(rec["seller sku code"] || "");
     const desc = String(rec["description"] || "");
 
-    // QR on the left (square, ~20mm)
-    const qrSize = 20, qrX = M, qrY = (PAGE_H - qrSize) / 2;
-    if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
-
-    // right column
-    const rx = qrX + qrSize + 1.5;
-    const rw = PAGE_W - M - rx;
-
-    // 1D barcode on top of the right column
-    if (item) {
-      try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", rx, 1.8, rw, 6.5); } catch (e) {}
+    if (codeType === "qr") {
+      // QR (2D) on the left, text on the right (y advances per wrapped line)
+      const qrSize = 19, qrX = M, qrY = (PAGE_H - qrSize) / 2;
+      if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
+      const rx = qrX + qrSize + 2;
+      const rw = PAGE_W - M - rx;
+      let y = 6.2;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+      doc.text(item, rx, y); y += 4.2;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.8);
+      doc.splitTextToSize(sku, rw).forEach((ln) => { doc.text(ln, rx, y); y += 3.0; });
+      y += 0.5;
+      doc.setFontSize(6.5);
+      doc.splitTextToSize(desc, rw).slice(0, 2).forEach((ln) => { doc.text(ln, rx, y); y += 2.8; });
+    } else {
+      // Linear barcode (1D) full width on top, text below (Myntra style)
+      const side = 3, bw = PAGE_W - 2 * side;
+      if (item) { try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", side, 2, bw, 8.5); } catch (e) {} }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      doc.text(item, side, 14.6);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+      doc.text(doc.splitTextToSize(sku, bw), side, 18.6);
+      doc.setFontSize(7);
+      doc.splitTextToSize(desc, bw).slice(0, 1).forEach((ln) => doc.text(ln, side, 22.4));
     }
-    // item code (human readable), bold
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8);
-    doc.text(item, rx, 11.6);
-    // seller sku
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-    doc.text(doc.splitTextToSize(sku, rw), rx, 15.4);
-    // description (wraps)
-    doc.setFontSize(6.2);
-    const dLines = doc.splitTextToSize(desc, rw).slice(0, 2);
-    dLines.forEach((ln, i) => doc.text(ln, rx, 19.2 + i * 2.4));
   }
 
   function newDoc() {
     const { jsPDF } = window.jspdf;
     return new jsPDF({ orientation: "landscape", unit: "mm", format: [PAGE_W, PAGE_H], compress: true });
   }
-  function buildItemDoc(rec) { const d = newDoc(); drawItem(d, rec); return d; }
-  function buildItemDocMulti(recs) {
+  function buildItemDoc(rec, codeType) { const d = newDoc(); drawItem(d, rec, codeType || "barcode"); return d; }
+  function buildItemDocMulti(recs, codeType) {
     const d = newDoc();
-    recs.forEach((r, i) => { if (i > 0) d.addPage([PAGE_W, PAGE_H], "landscape"); drawItem(d, r); });
+    recs.forEach((r, i) => { if (i > 0) d.addPage([PAGE_W, PAGE_H], "landscape"); drawItem(d, r, codeType || "barcode"); });
     return d;
   }
 
