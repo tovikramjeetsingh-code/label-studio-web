@@ -77,10 +77,8 @@
     return y + lines.length * lh;
   }
 
-  function buildLabelDoc(row) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "mm", format: [PAGE_W, PAGE_H], compress: true });
-
+  // Draw one label onto the current page of `doc`.
+  function drawLabel(doc, row) {
     const left = M + 0.6;
     const rightEdge = PAGE_W - M - 0.6;
     const fullW = rightEdge - left;
@@ -142,8 +140,29 @@
       doc.setFont("helvetica", "bold"); doc.setFontSize(9);
       doc.text(sku, PAGE_W / 2, PAGE_H - M - 1.8, { align: "center" });
     }
+  }
+
+  function newDoc() {
+    const { jsPDF } = window.jspdf;
+    return new jsPDF({ unit: "mm", format: [PAGE_W, PAGE_H], compress: true });
+  }
+
+  // One label -> one-page doc.
+  function buildLabelDoc(row) {
+    const doc = newDoc();
+    drawLabel(doc, row);
     return doc;
   }
 
-  window.LabelRender = { buildLabelDoc, barcodeDataURL };
+  // Many labels -> one multi-page doc (one 60x83mm page per row) for a single print job.
+  function buildLabelDocMulti(rows) {
+    const doc = newDoc();
+    rows.forEach((row, i) => {
+      if (i > 0) doc.addPage([PAGE_W, PAGE_H], "portrait");
+      drawLabel(doc, row);
+    });
+    return doc;
+  }
+
+  window.LabelRender = { buildLabelDoc, buildLabelDocMulti, barcodeDataURL };
 })();

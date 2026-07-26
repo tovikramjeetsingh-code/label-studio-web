@@ -39,6 +39,24 @@ it once). Only the encrypted `reference.enc.js` is committed; the plaintext
 catalog never leaves your machine.
 
 
+## Direct printing (QZ Tray)
+
+Print stickers straight to a label printer — no PDF, no print dialog — via
+[QZ Tray](https://qz.io/download/), a small free app installed on each printing
+machine. The page talks to it over a secure localhost WebSocket and sends each
+label as a 60×83 mm PDF.
+
+- **Per machine, once:** install QZ Tray and leave it running (menu-bar/tray). On
+  the site click **Connect printer**, pick the printer (remembered per browser).
+- **Signing:** this is a static site with no backend, so QZ runs *unsigned* — on
+  first print QZ shows an **Allow** dialog; tick **Remember** and printing is
+  silent from then on. (A signing key can't be shipped in a public page.)
+- **Buttons:** per-row **Print**, or **🖨 Print all** (sent as one multi-page job).
+  **Copies** selector applies to both. The ZIP download still works as a fallback.
+- Code: [`assets/print.js`](assets/print.js) + vendored `vendor/qz-tray.js`.
+  Uses PDF *pixel* printing so it works with any OS-installed printer; a Zebra/ZPL
+  raw path can be added if crisper thermal output is wanted.
+
 ## Fixed values
 
 The two statutory addresses and Country of Origin = INDIA live in

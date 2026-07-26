@@ -48,6 +48,69 @@
   $("refPass").addEventListener("keydown", (e) => { if (e.key === "Enter") doUnlock(); });
   $("refClear").addEventListener("click", () => { window.LabelParse.forgetPassword(); updateRef(); });
 
+  // ---- direct printing (QZ Tray) ----
+  const LP = window.LabelPrint;
+  function selectedPrinter() { return $("qzPrinter").value || LP.savedPrinter(); }
+  function copies() { return Math.max(1, parseInt($("qzCopies").value, 10) || 1); }
+
+  function printConnected() { return LP.isConnected(); }
+  function refreshPrintButtons() {
+    const ready = printConnected() && ROWS.length > 0;
+    $("printAllBtn").disabled = !ready;
+    $("printAllBtn").title = printConnected() ? "" : "Connect a printer above first";
+  }
+
+  async function populatePrinters() {
+    const printers = await LP.listPrinters();
+    const def = (await LP.defaultPrinter()) || "";
+    const want = LP.savedPrinter() || def;
+    const sel = $("qzPrinter");
+    sel.innerHTML = printers.map((p) => '<option value="' + esc(p) + '"' + (p === want ? " selected" : "") + ">" + esc(p) + "</option>").join("");
+    if (!printers.length) { $("qzInfo").innerHTML = '<span style="color:var(--warn)">Connected, but no printers found on this machine.</span>'; return; }
+    if (!want && printers[0]) sel.value = printers[0];
+    LP.savePrinter(sel.value);
+    sel.classList.remove("hidden"); $("qzCopiesWrap").classList.remove("hidden");
+    $("qzInfo").innerHTML = "✅ Connected to QZ Tray. Printing to <b>" + esc(sel.value) + "</b>.";
+  }
+
+  async function doConnect(silent) {
+    if (!LP.available()) { if (!silent) $("qzInfo").innerHTML = '<span style="color:var(--err)">Print library failed to load.</span>'; return; }
+    if (!silent) $("qzInfo").textContent = "Connecting to QZ Tray…";
+    try {
+      await LP.connect();
+      await populatePrinters();
+      refreshPrintButtons();
+    } catch (e) {
+      if (!silent) $("qzInfo").innerHTML = '<span style="color:var(--err)">✕ QZ Tray not detected. Install &amp; run it from ' +
+        '<a href="https://qz.io/download/" target="_blank" rel="noopener">qz.io/download</a>, then click Connect again.</span>';
+      refreshPrintButtons();
+    }
+  }
+  $("qzConnect").addEventListener("click", () => doConnect(false));
+  $("qzPrinter").addEventListener("change", () => {
+    LP.savePrinter($("qzPrinter").value);
+    $("qzInfo").innerHTML = "✅ Connected. Printing to <b>" + esc($("qzPrinter").value) + "</b>.";
+  });
+  doConnect(true);   // soft auto-connect if QZ is already running + remembered
+
+  async function printRow(i) {
+    if (!printConnected()) { $("qzInfo").innerHTML = '<span style="color:var(--warn)">Click “Connect printer” above first.</span>'; $("printCard").scrollIntoView({behavior:"smooth"}); return; }
+    try { await LP.printOne(ROWS[i], selectedPrinter(), copies()); }
+    catch (e) { $("genMsg").innerHTML = '<span style="color:var(--err)">Print failed: ' + esc(e.message || e) + "</span>"; }
+  }
+
+  $("printAllBtn").addEventListener("click", async () => {
+    if (!printConnected()) return;
+    $("printAllBtn").disabled = true; $("genMsg").textContent = "Sending " + ROWS.length + " labels to the printer…";
+    try {
+      await LP.printAll(ROWS, selectedPrinter(), copies());
+      $("genMsg").innerHTML = "✅ Sent " + ROWS.length + " labels to <b>" + esc(selectedPrinter()) + "</b>.";
+    } catch (e) {
+      $("genMsg").innerHTML = '<span style="color:var(--err)">Print failed: ' + esc(e.message || e) + "</span>";
+    }
+    $("printAllBtn").disabled = false;
+  });
+
   // ---- upload ----
   const drop = $("drop"), fileInput = $("fileInput");
   drop.addEventListener("click", () => fileInput.click());
@@ -147,7 +210,7 @@
       if (isBad(r)) tr.classList.add("bad");
       tr.innerHTML =
         '<td class="rownum">' + (i + 1) + "</td>" +
-        '<td><a class="pv" data-i="' + i + '">Preview</a></td>' +
+        '<td><a class="pv" data-i="' + i + '">Preview</a> · <a class="pr" data-i="' + i + '">Print</a></td>' +
         "<td><b>" + esc(r["seller sku code"]) + "</b></td>" +
         "<td>" + esc(r["sku code"]) + "</td><td>" + esc(r.size) + "</td>" +
         "<td>₹" + esc(r.mrp) + "</td><td>" + esc(r.brand) + "</td>" +
@@ -156,10 +219,12 @@
       tb.appendChild(tr);
     });
     tb.querySelectorAll("a.pv").forEach((a) => a.addEventListener("click", () => openPreview(+a.dataset.i)));
+    tb.querySelectorAll("a.pr").forEach((a) => a.addEventListener("click", () => printRow(+a.dataset.i)));
 
     $("genBtn").disabled = false; $("genBtn").style.display = "";
     $("prog").style.display = "none"; $("progFill").style.width = "0%";
     $("genMsg").textContent = ""; $("downloadBtn").style.display = "none";
+    refreshPrintButtons();
   }
 
   // ---- preview ----

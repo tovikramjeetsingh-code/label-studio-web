@@ -48,6 +48,21 @@
     <a id="refClear" class="hidden" style="color:var(--err);font-size:12.5px;cursor:pointer;font-weight:600">Forget on this device</a>
   </section>
 
+  <!-- Direct printing via QZ Tray -->
+  <section class="card" id="printCard">
+    <h2>Direct printing <span class="pill priv-pill" id="qzBadge">🖨 QZ Tray</span></h2>
+    <div class="sub">Print stickers straight to your label printer — no PDF, no dialog. Needs the free
+      <a href="https://qz.io/download/" target="_blank" rel="noopener">QZ Tray</a> app running on this machine
+      (one-time install; on first print click "Allow" and tick "Remember").</div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <button class="btn ghost" id="qzConnect">Connect printer</button>
+      <select id="qzPrinter" class="hidden" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;min-width:240px"></select>
+      <label class="hidden" id="qzCopiesWrap" style="font-size:12.5px;color:var(--muted)">Copies
+        <input type="number" id="qzCopies" min="1" value="1" style="width:56px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;margin-left:4px"></label>
+    </div>
+    <div id="qzInfo" style="font-size:12.5px;color:var(--muted);margin-top:10px;"></div>
+  </section>
+
   <!-- Fixed values -->
   <section class="card">
     <h2>Fixed on every label</h2>
@@ -84,12 +99,13 @@
     </div>
   </section>
 
-  <!-- STEP 3 : generate -->
+  <!-- STEP 3 : print or download -->
   <section class="card hidden" id="genCard">
-    <h2>3 · Generate</h2>
-    <div class="sub">One 60 × 83 mm PDF per row, named by Seller SKU, delivered as a ZIP.</div>
+    <h2>3 · Print or download</h2>
+    <div class="sub">Print every label straight to your label printer, or download them as a ZIP of 60 × 83 mm PDFs (named by Seller SKU).</div>
     <div class="genbar">
-      <button class="btn primary" id="genBtn">Generate labels</button>
+      <button class="btn primary" id="printAllBtn" disabled title="Connect a printer above first">🖨 Print all</button>
+      <button class="btn ghost" id="genBtn">⬇ Generate ZIP</button>
       <div class="progress" id="prog"><div class="fill" id="progFill"></div></div>
       <span id="genMsg"></span>
       <button class="btn" id="downloadBtn">⬇ Download ZIP</button>
@@ -107,10 +123,12 @@
 <script src="vendor/JsBarcode.all.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
+<script src="vendor/qz-tray.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/reference.enc.js"></script>
 <script src="assets/parse.js"></script>
 <script src="assets/label.js"></script>
+<script src="assets/print.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>

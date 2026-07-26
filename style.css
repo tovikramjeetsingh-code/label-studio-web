@@ -46,7 +46,7 @@ th { background: #f8fafc; position: sticky; top: 0; font-size: 11px; text-transf
 tr:hover td { background: #fdf7fa; }
 tr.bad td { background: #fff5f5; }
 td.rownum { color: var(--muted); }
-tr td a.pv { color: var(--accent); text-decoration: none; font-weight: 600; cursor: pointer; }
+tr td a.pv, tr td a.pr { color: var(--accent); text-decoration: none; font-weight: 600; cursor: pointer; }
 
 .btn { appearance: none; border: 0; border-radius: 8px; padding: 11px 22px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s; }
 .btn.primary { background: var(--accent); color: #fff; }
