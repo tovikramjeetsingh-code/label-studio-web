@@ -9,20 +9,26 @@
   let MODE = "product";   // "product" (60x83) | "item" (50x25 dual-code)
 
   const ITEMCODE_KEY = "labelStudioItemCode_v1";
-  function itemCodeType() {
-    const el = document.querySelector('input[name="codeType"]:checked');
-    return el ? el.value : (localStorage.getItem(ITEMCODE_KEY) || "barcode");
-  }
-  const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r, itemCodeType()) : window.LabelRender.buildLabelDoc(r);
-  const buildMulti = (rs) => MODE === "item" ? window.ItemLabel.buildItemDocMulti(rs, itemCodeType()) : window.LabelRender.buildLabelDocMulti(rs);
-  const labelSize = () => MODE === "item" ? window.ItemLabel.size : { w: 60, h: 83 };
+  const ITEMSIZE_KEY = "labelStudioItemSize_v1";
+  const radioVal = (name, fallback) => {
+    const el = document.querySelector('input[name="' + name + '"]:checked');
+    return el ? el.value : fallback;
+  };
+  function itemCodeType() { return radioVal("codeType", localStorage.getItem(ITEMCODE_KEY) || "barcode"); }
+  function itemSizeKey() { return radioVal("itemSize", localStorage.getItem(ITEMSIZE_KEY) || "50x25"); }
 
-  // restore + persist the item-code type choice
+  const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r, itemCodeType(), itemSizeKey()) : window.LabelRender.buildLabelDoc(r);
+  const buildMulti = (rs) => MODE === "item" ? window.ItemLabel.buildItemDocMulti(rs, itemCodeType(), itemSizeKey()) : window.LabelRender.buildLabelDocMulti(rs);
+  const labelSize = () => MODE === "item" ? window.ItemLabel.sizeOf(itemSizeKey()) : { w: 60, h: 83 };
+
+  // restore + persist the item-code type and size choices
   (function () {
-    const saved = localStorage.getItem(ITEMCODE_KEY);
-    if (saved) { const el = document.querySelector('input[name="codeType"][value="' + saved + '"]'); if (el) el.checked = true; }
-    document.querySelectorAll('input[name="codeType"]').forEach((r) =>
-      r.addEventListener("change", () => { if (r.checked) localStorage.setItem(ITEMCODE_KEY, r.value); }));
+    [["codeType", ITEMCODE_KEY], ["itemSize", ITEMSIZE_KEY]].forEach(([name, key]) => {
+      const saved = localStorage.getItem(key);
+      if (saved) { const el = document.querySelector('input[name="' + name + '"][value="' + saved + '"]'); if (el) el.checked = true; }
+      document.querySelectorAll('input[name="' + name + '"]').forEach((r) =>
+        r.addEventListener("change", () => { if (r.checked) localStorage.setItem(key, r.value); }));
+    });
   })();
 
   function setMode(mode) {
@@ -32,6 +38,7 @@
     $("helpProduct").classList.toggle("hidden", mode !== "product");
     $("helpItem").classList.toggle("hidden", mode !== "item");
     $("codeTypeRow").classList.toggle("hidden", mode !== "item");
+    $("itemSizeRow").classList.toggle("hidden", mode !== "item");
     $("dropHint").textContent = mode === "item" ? ".pdf" : ".csv · .xlsx";
     $("fileInput").accept = mode === "item" ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
     ROWS = [];
@@ -127,13 +134,12 @@
   });
   doConnect(true);   // soft auto-connect if QZ is already running + remembered
 
-  // Rasterize one product label to a 203-dpi canvas (via PDF.js) for BITMAP TSPL.
-  async function labelToCanvas(row) {
-    const bytes = window.LabelRender.buildLabelDoc(row).output("arraybuffer");
-    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  // Rasterize a jsPDF doc to a 203-dpi canvas (via PDF.js) for BITMAP TSPL.
+  async function docToCanvas(doc, widthMm) {
+    const pdf = await pdfjsLib.getDocument({ data: doc.output("arraybuffer") }).promise;
     const page = await pdf.getPage(1);
     const vp1 = page.getViewport({ scale: 1 });
-    const dotsW = Math.round(60 * 203 / 25.4);           // 60mm at 203 dpi
+    const dotsW = Math.round(widthMm * 203 / 25.4);
     const vp = page.getViewport({ scale: dotsW / vp1.width });
     const cv = document.createElement("canvas");
     cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
@@ -142,23 +148,31 @@
     return cv;
   }
 
+  // Render rows to bitmaps and send as raw TSPL, chunked with progress.
+  async function printBitmaps(rows, buildDoc, sizeMm, gapMm) {
+    const CHUNK = 20;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const canvases = [];
+      for (const r of rows.slice(i, i + CHUNK)) canvases.push(await docToCanvas(buildDoc(r), sizeMm.w));
+      await LP.printRawBytes(window.TSCLabel.buildBitmapTSPL(canvases, sizeMm, copies(), gapMm), selectedPrinter());
+      $("genMsg").textContent = "Sent " + Math.min(i + CHUNK, rows.length) + " / " + rows.length + " to the printer…";
+    }
+  }
+
   // Both label types print by talking straight to the printer (raw TSPL).
   async function sendPrint(rows) {
     if (MODE === "item") {
-      // native TSPL text/barcode, 2-up
-      await LP.printRaw(window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies()), selectedPrinter());
+      if (itemSizeKey() === "50x25") {
+        // native TSPL text/barcode, 2-up
+        await LP.printRaw(window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies()), selectedPrinter());
+      } else {
+        // 25x10 — bitmap TSPL (single-up default; roll layout TBD)
+        await printBitmaps(rows, (r) => window.ItemLabel.buildItemDoc(r, itemCodeType(), "25x10"), { w: 25, h: 10 }, 2);
+      }
       return;
     }
-    // product: render each label to a 203-dpi bitmap, send raw TSPL in chunks
-    const CHUNK = 20;
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const slice = rows.slice(i, i + CHUNK);
-      const canvases = [];
-      for (const r of slice) canvases.push(await labelToCanvas(r));
-      const job = window.TSCLabel.buildBitmapTSPL(canvases, { w: 60, h: 83 }, copies());
-      await LP.printRawBytes(job, selectedPrinter());
-      $("genMsg").textContent = "Sent " + Math.min(i + CHUNK, rows.length) + " / " + rows.length + " to the printer…";
-    }
+    // product 60x83 — bitmap TSPL
+    await printBitmaps(rows, (r) => window.LabelRender.buildLabelDoc(r), { w: 60, h: 83 }, window.TSCLabel.prod.gap);
   }
 
   async function printRow(i) {

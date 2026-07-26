@@ -2,9 +2,6 @@
 // page: item code + seller SKU + description) and regenerate each as a 50x25mm
 // DUAL-code sticker — a QR (2D) and a Code-128 (1D), both encoding the item code.
 (function () {
-  const PT = 0.352777778;
-  const PAGE_W = 50, PAGE_H = 25, M = 1.2;
-
   if (window.pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
   }
@@ -79,52 +76,69 @@
     return cv.toDataURL("image/png");
   }
 
-  // ---- render one 50x25mm label with the CHOSEN code (codeType: "qr" | "barcode") ----
-  function drawItem(doc, rec, codeType) {
-    const item = String(rec["item code"] || "");
-    const sku = String(rec["seller sku code"] || "");
-    const desc = String(rec["description"] || "");
+  const SIZES = { "50x25": { w: 50, h: 25 }, "25x10": { w: 25, h: 10 } };
 
+  // ---- 50 x 25 mm : code + item code + seller SKU + description ----
+  function draw50x25(doc, rec, codeType) {
+    const W = 50, H = 25, M = 1.2;
+    const item = String(rec["item code"] || ""), sku = String(rec["seller sku code"] || ""), desc = String(rec["description"] || "");
     if (codeType === "qr") {
-      // QR (2D) on the left, text on the right (y advances per wrapped line)
-      const qrSize = 19, qrX = M, qrY = (PAGE_H - qrSize) / 2;
+      const qrSize = 19, qrX = M, qrY = (H - qrSize) / 2;
       if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
-      const rx = qrX + qrSize + 2;
-      const rw = PAGE_W - M - rx;
+      const rx = qrX + qrSize + 2, rw = W - M - rx;
       let y = 6.2;
-      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
-      doc.text(item, rx, y); y += 4.2;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.text(item, rx, y); y += 4.2;
       doc.setFont("helvetica", "normal"); doc.setFontSize(6.8);
       doc.splitTextToSize(sku, rw).forEach((ln) => { doc.text(ln, rx, y); y += 3.0; });
-      y += 0.5;
-      doc.setFontSize(6.5);
+      y += 0.5; doc.setFontSize(6.5);
       doc.splitTextToSize(desc, rw).slice(0, 2).forEach((ln) => { doc.text(ln, rx, y); y += 2.8; });
     } else {
-      // Linear barcode (1D) full width on top, text below (Myntra style)
-      const side = 3, bw = PAGE_W - 2 * side;
+      const side = 3, bw = W - 2 * side;
       if (item) { try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", side, 2, bw, 8.5); } catch (e) {} }
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-      doc.text(item, side, 14.6);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-      doc.text(doc.splitTextToSize(sku, bw), side, 18.6);
-      doc.setFontSize(7);
-      doc.splitTextToSize(desc, bw).slice(0, 1).forEach((ln) => doc.text(ln, side, 22.4));
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text(item, side, 14.6);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.text(doc.splitTextToSize(sku, bw), side, 18.6);
+      doc.setFontSize(7); doc.splitTextToSize(desc, bw).slice(0, 1).forEach((ln) => doc.text(ln, side, 22.4));
     }
   }
 
-  function newDoc() {
-    const { jsPDF } = window.jspdf;
-    return new jsPDF({ orientation: "landscape", unit: "mm", format: [PAGE_W, PAGE_H], compress: true });
+  // ---- 25 x 10 mm : very small — code + item code only (SKU/desc don't fit) ----
+  function draw25x10(doc, rec, codeType) {
+    const W = 25, H = 10, M = 1;
+    const item = String(rec["item code"] || "");
+    if (codeType === "qr") {
+      const qrSize = 8, qrX = M, qrY = (H - qrSize) / 2;
+      if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
+      const rx = qrX + qrSize + 1.2;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.text(item, rx, 6.2);
+    } else {
+      const side = 1, bw = W - 2 * side;
+      if (item) { try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", side, 1, bw, 5); } catch (e) {} }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.text(item, W / 2, 8.7, { align: "center" });
+    }
   }
-  function buildItemDoc(rec, codeType) { const d = newDoc(); drawItem(d, rec, codeType || "barcode"); return d; }
-  function buildItemDocMulti(recs, codeType) {
-    const d = newDoc();
-    recs.forEach((r, i) => { if (i > 0) d.addPage([PAGE_W, PAGE_H], "landscape"); drawItem(d, r, codeType || "barcode"); });
+
+  function drawItem(doc, rec, codeType, sizeKey) {
+    const ct = codeType || "barcode";
+    if (sizeKey === "25x10") draw25x10(doc, rec, ct); else draw50x25(doc, rec, ct);
+  }
+
+  function newDoc(W, H) {
+    const { jsPDF } = window.jspdf;
+    return new jsPDF({ orientation: "landscape", unit: "mm", format: [W, H], compress: true });
+  }
+  function buildItemDoc(rec, codeType, sizeKey) {
+    const s = SIZES[sizeKey] || SIZES["50x25"];
+    const d = newDoc(s.w, s.h); drawItem(d, rec, codeType, sizeKey); return d;
+  }
+  function buildItemDocMulti(recs, codeType, sizeKey) {
+    const s = SIZES[sizeKey] || SIZES["50x25"];
+    const d = newDoc(s.w, s.h);
+    recs.forEach((r, i) => { if (i > 0) d.addPage([s.w, s.h], "landscape"); drawItem(d, r, codeType, sizeKey); });
     return d;
   }
 
   window.ItemLabel = {
     parsePDF, qrDataURL, buildItemDoc, buildItemDocMulti,
-    size: { w: PAGE_W, h: PAGE_H },
+    SIZES, sizeOf: (k) => SIZES[k] || SIZES["50x25"],
   };
 })();
