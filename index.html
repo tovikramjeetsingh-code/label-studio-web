@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -32,12 +32,12 @@
       <b>Only have a list of SKUs?</b> Load a reference below, then upload the list — missing details (brand, MRP, style…) are filled in automatically.</div>
     <div class="sub hidden" id="helpItem">Upload the <b>Myntra system-generated barcode PDF</b> (one item barcode per page).
       Each item code becomes a sticker in your chosen <b>size</b> and <b>code</b> (encoding the item code):
-      <b>50 × 25 mm</b> shows item code + seller SKU + description; <b>25 × 10 mm</b> shows the code + item code.
-      <b>Print all</b> sends raw TSPL straight to your TSC printer (50 × 25 prints 2-up).</div>
+      <b>50 × 25 mm</b> shows item code + seller SKU + description; <b>25 × 15 mm</b> shows the code + item code + seller SKU.
+      <b>Print all</b> sends raw TSPL straight to your TSC printer (50 × 25 prints 2-up, 25 × 15 prints 4-up).</div>
     <div class="hidden" id="itemSizeRow" style="margin:2px 0 8px;font-size:13px;display:flex;gap:16px;align-items:center;">
       <b>Label size:</b>
       <label style="cursor:pointer"><input type="radio" name="itemSize" value="50x25" checked> 50 × 25 mm</label>
-      <label style="cursor:pointer"><input type="radio" name="itemSize" value="25x10"> 25 × 10 mm</label>
+      <label style="cursor:pointer"><input type="radio" name="itemSize" value="25x15"> 25 × 15 mm</label>
     </div>
     <div class="hidden" id="codeTypeRow" style="margin:2px 0 14px;font-size:13px;display:flex;gap:16px;align-items:center;">
       <b>Code on the label:</b>
@@ -145,13 +145,13 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=6"></script>
+<script src="assets/config.js?v=7"></script>
 <script src="assets/reference.enc.js"></script>
-<script src="assets/parse.js?v=6"></script>
-<script src="assets/label.js?v=6"></script>
-<script src="assets/itemlabel.js?v=6"></script>
-<script src="assets/tsc.js?v=6"></script>
-<script src="assets/print.js?v=6"></script>
-<script src="assets/app.js?v=6"></script>
+<script src="assets/parse.js?v=7"></script>
+<script src="assets/label.js?v=7"></script>
+<script src="assets/itemlabel.js?v=7"></script>
+<script src="assets/tsc.js?v=7"></script>
+<script src="assets/print.js?v=7"></script>
+<script src="assets/app.js?v=7"></script>
 </body>
 </html>

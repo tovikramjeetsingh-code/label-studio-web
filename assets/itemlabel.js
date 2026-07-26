@@ -76,7 +76,7 @@
     return cv.toDataURL("image/png");
   }
 
-  const SIZES = { "50x25": { w: 50, h: 25 }, "25x10": { w: 25, h: 10 } };
+  const SIZES = { "50x25": { w: 50, h: 25 }, "25x15": { w: 25, h: 15 } };
 
   // ---- 50 x 25 mm : code + item code + seller SKU + description ----
   function draw50x25(doc, rec, codeType) {
@@ -101,25 +101,28 @@
     }
   }
 
-  // ---- 25 x 10 mm : very small — code + item code only (SKU/desc don't fit) ----
-  function draw25x10(doc, rec, codeType) {
-    const W = 25, H = 10, M = 1;
-    const item = String(rec["item code"] || "");
+  // ---- 25 x 15 mm : small — code + item code + seller SKU ----
+  function draw25x15(doc, rec, codeType) {
+    const W = 25, H = 15, M = 1;
+    const item = String(rec["item code"] || ""), sku = String(rec["seller sku code"] || "");
     if (codeType === "qr") {
-      const qrSize = 8, qrX = M, qrY = (H - qrSize) / 2;
+      const qrSize = 10, qrX = M, qrY = 1;
       if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
-      const rx = qrX + qrSize + 1.2;
-      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.text(item, rx, 6.2);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(5.8); doc.text(item, qrX + qrSize + 1, 6.5);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(5);
+      doc.text(doc.splitTextToSize(sku, W - 2 * M).slice(0, 1), W / 2, 13.6, { align: "center" });
     } else {
       const side = 1, bw = W - 2 * side;
-      if (item) { try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", side, 1, bw, 5); } catch (e) {} }
-      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.text(item, W / 2, 8.7, { align: "center" });
+      if (item) { try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", side, 1.5, bw, 6.5); } catch (e) {} }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.text(item, W / 2, 11.3, { align: "center" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(5.5);
+      doc.text(doc.splitTextToSize(sku, bw).slice(0, 1), W / 2, 14.2, { align: "center" });
     }
   }
 
   function drawItem(doc, rec, codeType, sizeKey) {
     const ct = codeType || "barcode";
-    if (sizeKey === "25x10") draw25x10(doc, rec, ct); else draw50x25(doc, rec, ct);
+    if (sizeKey === "25x15") draw25x15(doc, rec, ct); else draw50x25(doc, rec, ct);
   }
 
   function newDoc(W, H) {

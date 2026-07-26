@@ -120,5 +120,31 @@
     return concat(parts);
   }
 
-  window.TSCLabel = { geom: G, prod: PROD, buildItemTSPL, buildBitmapTSPL };
+  // --- multi-up bitmap rolls (composite N labels per row, then BITMAP the row) ---
+  // Geometry per size (edit to calibrate). up = labels across; mm.
+  const ROLLS = {
+    "25x15": { up: 4, labelW: 25, labelH: 15, side: 0.5, mid: 1, rowGap: 3 },
+  };
+
+  // labelCanvases: one 203-dpi canvas per label (rendered at labelW wide).
+  function buildMultiUpBitmapTSPL(labelCanvases, rollKey, copies) {
+    const g = ROLLS[rollKey];
+    const dot = (mm) => Math.round(mm * G.dpi / 25.4);
+    const mediaW = g.side * 2 + g.up * g.labelW + (g.up - 1) * g.mid;
+    const rowW = dot(mediaW), rowH = dot(g.labelH);
+    const rows = [];
+    for (let i = 0; i < labelCanvases.length; i += g.up) {
+      const cv = document.createElement("canvas");
+      cv.width = rowW; cv.height = rowH;
+      const cx = cv.getContext("2d");
+      cx.fillStyle = "#fff"; cx.fillRect(0, 0, rowW, rowH);
+      for (let j = 0; j < g.up && i + j < labelCanvases.length; j++) {
+        cx.drawImage(labelCanvases[i + j], dot(g.side + j * (g.labelW + g.mid)), 0, dot(g.labelW), rowH);
+      }
+      rows.push(cv);
+    }
+    return buildBitmapTSPL(rows, { w: mediaW, h: g.labelH }, copies, g.rowGap);
+  }
+
+  window.TSCLabel = { geom: G, prod: PROD, rolls: ROLLS, buildItemTSPL, buildBitmapTSPL, buildMultiUpBitmapTSPL };
 })();

@@ -166,12 +166,18 @@
         // native TSPL text/barcode, 2-up
         await LP.printRaw(window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies()), selectedPrinter());
       } else {
-        // 25x10 — bitmap TSPL (single-up default; roll layout TBD)
-        await printBitmaps(rows, (r) => window.ItemLabel.buildItemDoc(r, itemCodeType(), "25x10"), { w: 25, h: 10 }, 2);
+        // 25x15 — 4-up: render each label, composite rows, BITMAP TSPL, chunked
+        const CHUNK = 20, ct = itemCodeType();
+        for (let i = 0; i < rows.length; i += CHUNK) {
+          const canvases = [];
+          for (const r of rows.slice(i, i + CHUNK)) canvases.push(await docToCanvas(window.ItemLabel.buildItemDoc(r, ct, "25x15"), 25));
+          await LP.printRawBytes(window.TSCLabel.buildMultiUpBitmapTSPL(canvases, "25x15", copies()), selectedPrinter());
+          $("genMsg").textContent = "Sent " + Math.min(i + CHUNK, rows.length) + " / " + rows.length + " to the printer…";
+        }
       }
       return;
     }
-    // product 60x83 — bitmap TSPL
+    // product 60x83 — single-up bitmap TSPL
     await printBitmaps(rows, (r) => window.LabelRender.buildLabelDoc(r), { w: 60, h: 83 }, window.TSCLabel.prod.gap);
   }
 
