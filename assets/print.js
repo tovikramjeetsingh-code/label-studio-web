@@ -38,12 +38,12 @@
   function savedPrinter() { try { return localStorage.getItem(PRINTER_KEY) || ""; } catch (e) { return ""; } }
   function savePrinter(name) { try { localStorage.setItem(PRINTER_KEY, name); } catch (e) {} }
 
-  function _config(printer, copies) {
+  function _config(printer, size, copies) {
     return qz.configs.create(printer, {
       units: "mm",
-      size: { width: 60, height: 83 },
+      size: { width: size.w, height: size.h },
       margins: 0,
-      orientation: "portrait",
+      orientation: size.w > size.h ? "landscape" : "portrait",
       colorType: "grayscale",
       scaleContent: true,
       rasterize: false,          // keep the PDF vector-sharp
@@ -57,25 +57,12 @@
     return [{ type: "pixel", format: "pdf", flavor: "base64", data: b64 }];
   }
 
-  // Print one row as a single label.
-  async function printOne(row, printer, copies) {
+  // Print a jsPDF doc (single- or multi-page) as ONE job at the given mm size.
+  async function printDoc(doc, size, printer, copies) {
     if (!isConnected()) await connect();
     const p = printer || savedPrinter();
     if (!p) throw new Error("No printer selected.");
-    const doc = window.LabelRender.buildLabelDoc(row);
-    await qz.print(_config(p, copies), _pdfData(doc));
-  }
-
-  // Print many rows as ONE job (multi-page PDF, one label per page).
-  async function printAll(rows, printer, copies, onProgress) {
-    if (!isConnected()) await connect();
-    const p = printer || savedPrinter();
-    if (!p) throw new Error("No printer selected.");
-    if (!rows.length) return;
-    if (onProgress) onProgress(0, rows.length);
-    const doc = window.LabelRender.buildLabelDocMulti(rows);
-    await qz.print(_config(p, copies), _pdfData(doc));
-    if (onProgress) onProgress(rows.length, rows.length);
+    await qz.print(_config(p, size, copies), _pdfData(doc));
   }
 
   async function disconnect() { try { if (isConnected()) await qz.websocket.disconnect(); } catch (e) {} }
@@ -83,6 +70,6 @@
   window.LabelPrint = {
     available, isConnected, connect, disconnect,
     listPrinters, defaultPrinter, savedPrinter, savePrinter,
-    printOne, printAll,
+    printDoc,
   };
 })();

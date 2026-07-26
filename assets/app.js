@@ -6,6 +6,26 @@
 
   let ROWS = [];          // canonical rows ready to render
   let MAP_CTX = null;     // stash for the mapping step
+  let MODE = "product";   // "product" (60x83) | "item" (50x25 dual-code)
+
+  const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r) : window.LabelRender.buildLabelDoc(r);
+  const buildMulti = (rs) => MODE === "item" ? window.ItemLabel.buildItemDocMulti(rs) : window.LabelRender.buildLabelDocMulti(rs);
+  const labelSize = () => MODE === "item" ? window.ItemLabel.size : { w: 60, h: 83 };
+
+  function setMode(mode) {
+    if (mode === MODE) return;
+    MODE = mode;
+    document.querySelectorAll(".modebtn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+    $("helpProduct").classList.toggle("hidden", mode !== "product");
+    $("helpItem").classList.toggle("hidden", mode !== "item");
+    $("dropHint").textContent = mode === "item" ? ".pdf" : ".csv · .xlsx";
+    $("fileInput").accept = mode === "item" ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
+    ROWS = [];
+    $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
+    $("uploadToast").innerHTML = "";
+    refreshPrintButtons();
+  }
+  document.querySelectorAll(".modebtn").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 
   // fixed-values panel
   $("fxDesigned").textContent = C.DESIGNED_BY;
@@ -95,7 +115,7 @@
 
   async function printRow(i) {
     if (!printConnected()) { $("qzInfo").innerHTML = '<span style="color:var(--warn)">Click “Connect printer” above first.</span>'; $("printCard").scrollIntoView({behavior:"smooth"}); return; }
-    try { await LP.printOne(ROWS[i], selectedPrinter(), copies()); }
+    try { await LP.printDoc(buildOne(ROWS[i]), labelSize(), selectedPrinter(), copies()); }
     catch (e) { $("genMsg").innerHTML = '<span style="color:var(--err)">Print failed: ' + esc(e.message || e) + "</span>"; }
   }
 
@@ -103,7 +123,7 @@
     if (!printConnected()) return;
     $("printAllBtn").disabled = true; $("genMsg").textContent = "Sending " + ROWS.length + " labels to the printer…";
     try {
-      await LP.printAll(ROWS, selectedPrinter(), copies());
+      await LP.printDoc(buildMulti(ROWS), labelSize(), selectedPrinter(), copies());
       $("genMsg").innerHTML = "✅ Sent " + ROWS.length + " labels to <b>" + esc(selectedPrinter()) + "</b>.";
     } catch (e) {
       $("genMsg").innerHTML = '<span style="color:var(--err)">Print failed: ' + esc(e.message || e) + "</span>";
@@ -122,20 +142,32 @@
   });
   fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
 
+  function resetDrop() { drop.querySelector(".big").textContent = "Drop file here or click to browse"; fileInput.value = ""; }
+  function uploadErr(e) {
+    resetDrop();
+    $("uploadToast").innerHTML = '<div class="toast err">✕ ' + esc(e.message) + "</div>";
+    $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
+  }
+
   async function handleFile(file) {
     $("uploadToast").innerHTML = "";
     drop.querySelector(".big").textContent = 'Reading "' + file.name + '"…';
-    let res;
-    try { res = await window.LabelParse.parseUpload(file); }
-    catch (e) {
-      drop.querySelector(".big").textContent = "Drop file here or click to browse";
-      $("uploadToast").innerHTML = '<div class="toast err">✕ ' + esc(e.message) + "</div>";
-      $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
+    window._lastFile = file.name;
+
+    if (MODE === "item") {
+      let items;
+      try { items = await window.ItemLabel.parsePDF(file); }
+      catch (e) { uploadErr(e); return; }
+      resetDrop();
+      ROWS = items;
+      renderReview(file.name, items.length + " item codes", [], 0);
       return;
     }
-    drop.querySelector(".big").textContent = "Drop file here or click to browse";
-    fileInput.value = "";
-    window._lastFile = file.name;
+
+    let res;
+    try { res = await window.LabelParse.parseUpload(file); }
+    catch (e) { uploadErr(e); return; }
+    resetDrop();
     if (res.needsMapping) { renderMapping(file.name, res); return; }
     $("mapCard").classList.add("hidden");
     ROWS = res.rows;
@@ -188,11 +220,13 @@
   });
 
   // ---- review ----
+  const actionCell = (i) => '<td><a class="pv" data-i="' + i + '">Preview</a> · <a class="pr" data-i="' + i + '">Print</a></td>';
+
   function renderReview(filename, format, problems, enriched) {
     $("reviewCard").classList.remove("hidden"); $("genCard").classList.remove("hidden");
-    $("fileBadge").textContent = filename + " · " + format + " · " + ROWS.length + " labels";
-    const req = ["seller sku code", "sku code", "size", "mrp"];
-    const isBad = (r) => req.some((c) => !r[c]);
+    const kind = MODE === "item" ? "Item-code" : format;
+    $("fileBadge").textContent = filename + " · " + kind + " · " + ROWS.length + " labels";
+
     const notes = [];
     if (enriched) notes.push('<div class="toast ok-toast">🔎 ' + enriched +
       " row(s) completed / corrected from the stored listings (size kept from your file).</div>");
@@ -204,20 +238,37 @@
     }
     $("problemToast").innerHTML = notes.join("");
 
+    const thead = $("tbl").querySelector("thead");
     const tb = $("tbl").querySelector("tbody"); tb.innerHTML = "";
-    ROWS.forEach((r, i) => {
-      const tr = document.createElement("tr");
-      if (isBad(r)) tr.classList.add("bad");
-      tr.innerHTML =
-        '<td class="rownum">' + (i + 1) + "</td>" +
-        '<td><a class="pv" data-i="' + i + '">Preview</a> · <a class="pr" data-i="' + i + '">Print</a></td>' +
-        "<td><b>" + esc(r["seller sku code"]) + "</b></td>" +
-        "<td>" + esc(r["sku code"]) + "</td><td>" + esc(r.size) + "</td>" +
-        "<td>₹" + esc(r.mrp) + "</td><td>" + esc(r.brand) + "</td>" +
-        "<td>" + esc(r["article type"]) + "</td><td>" + esc(r["style name"]) + "</td>" +
-        "<td>" + esc(r["style id"]) + "</td><td>" + esc(r["month & year of manufacture"]) + "</td>";
-      tb.appendChild(tr);
-    });
+
+    if (MODE === "item") {
+      thead.innerHTML = "<tr><th>#</th><th></th><th>Item Code</th><th>Seller SKU</th><th>Description</th></tr>";
+      ROWS.forEach((r, i) => {
+        const tr = document.createElement("tr");
+        if (!r["item code"]) tr.classList.add("bad");
+        tr.innerHTML = '<td class="rownum">' + (i + 1) + "</td>" + actionCell(i) +
+          "<td><b>" + esc(r["item code"]) + "</b></td>" +
+          "<td>" + esc(r["seller sku code"]) + "</td>" +
+          "<td>" + esc(r["description"]) + "</td>";
+        tb.appendChild(tr);
+      });
+    } else {
+      thead.innerHTML = "<tr><th>#</th><th></th><th>Seller SKU</th><th>SKU Code (barcode)</th><th>Size</th>" +
+        "<th>MRP</th><th>Brand</th><th>Article Type</th><th>Style Name</th><th>Style ID</th><th>Month &amp; Year</th></tr>";
+      const req = ["seller sku code", "sku code", "size", "mrp"];
+      ROWS.forEach((r, i) => {
+        const tr = document.createElement("tr");
+        if (req.some((c) => !r[c])) tr.classList.add("bad");
+        tr.innerHTML =
+          '<td class="rownum">' + (i + 1) + "</td>" + actionCell(i) +
+          "<td><b>" + esc(r["seller sku code"]) + "</b></td>" +
+          "<td>" + esc(r["sku code"]) + "</td><td>" + esc(r.size) + "</td>" +
+          "<td>₹" + esc(r.mrp) + "</td><td>" + esc(r.brand) + "</td>" +
+          "<td>" + esc(r["article type"]) + "</td><td>" + esc(r["style name"]) + "</td>" +
+          "<td>" + esc(r["style id"]) + "</td><td>" + esc(r["month & year of manufacture"]) + "</td>";
+        tb.appendChild(tr);
+      });
+    }
     tb.querySelectorAll("a.pv").forEach((a) => a.addEventListener("click", () => openPreview(+a.dataset.i)));
     tb.querySelectorAll("a.pr").forEach((a) => a.addEventListener("click", () => printRow(+a.dataset.i)));
 
@@ -229,7 +280,7 @@
 
   // ---- preview ----
   function openPreview(i) {
-    const doc = window.LabelRender.buildLabelDoc(ROWS[i]);
+    const doc = buildOne(ROWS[i]);
     $("pvFrame").src = doc.output("bloburl");
     $("modal").style.display = "flex";
   }
@@ -247,11 +298,11 @@
     const zip = new JSZip(), used = {};
     for (let i = 0; i < ROWS.length; i++) {
       const r = ROWS[i];
-      let base = (r._filename || r["seller sku code"] || ("label_" + (i + 1))).replace(/[\\/:*?"<>|]/g, "_");
+      let base = (r._filename || r["seller sku code"] || r["item code"] || ("label_" + (i + 1))).replace(/[\\/:*?"<>|]/g, "_");
       let name = base, n = 2;
       while (used[name]) { name = base + "_" + n; n++; }
       used[name] = 1;
-      const doc = window.LabelRender.buildLabelDoc(r);
+      const doc = buildOne(r);
       zip.file(name + ".pdf", doc.output("blob"));
       $("progFill").style.width = Math.round(100 * (i + 1) / ROWS.length) + "%";
       $("genMsg").textContent = (i + 1) + " / " + ROWS.length + " labels…";

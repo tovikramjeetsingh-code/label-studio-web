@@ -16,18 +16,26 @@
 </header>
 
 <main>
+  <div class="modebar">
+    <button class="modebtn active" data-mode="product">🏷️ Product label · 60 × 83 mm</button>
+    <button class="modebtn" data-mode="item">🔳 Item-code label · 50 × 25 mm</button>
+  </div>
+
   <!-- STEP 1 -->
   <section class="card">
     <h2>1 · Upload your file</h2>
-    <div class="sub">CSV or Excel — one row per SKU-size. Three formats are auto-detected:<br>
+    <div class="sub" id="helpProduct">CSV or Excel — one row per SKU-size. Three formats are auto-detected:<br>
       <b>① Label Template</b> — brand, article type, style name, style id, size, seller sku code, sku code, mrp, month &amp; year of manufacture<br>
       <b>② Myntra STN Summary</b> — the portal export; Seller SKU = Vendor Article No, Month &amp; Year = current month<br>
       <b>③ Seller Listings Report</b> — the portal listings export; Month &amp; Year = current month<br>
       Extra columns are ignored. <b>Any other file</b> → you'll be asked to match its columns to the label fields.<br>
       <b>Only have a list of SKUs?</b> Load a reference below, then upload the list — missing details (brand, MRP, style…) are filled in automatically.</div>
+    <div class="sub hidden" id="helpItem">Upload the <b>Myntra system-generated barcode PDF</b> (one item barcode per page).
+      Each item code becomes a 50 × 25 mm sticker with a <b>QR (2D)</b> and a <b>linear barcode (1D)</b> — both encoding the item code —
+      plus the item code, seller SKU and description. Description is completed from your stored listing when the SKU matches.</div>
     <div id="drop">
       <div class="big">Drop file here or click to browse</div>
-      <div class="small">.csv · .xlsx</div>
+      <div class="small" id="dropHint">.csv · .xlsx</div>
     </div>
     <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.xlsm">
     <div id="uploadToast"></div>
@@ -124,10 +132,13 @@
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/qz-tray.js"></script>
+<script src="vendor/pdf.min.js"></script>
+<script src="vendor/qrcode.min.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/reference.enc.js"></script>
 <script src="assets/parse.js"></script>
 <script src="assets/label.js"></script>
+<script src="assets/itemlabel.js"></script>
 <script src="assets/print.js"></script>
 <script src="assets/app.js"></script>
 </body>

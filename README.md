@@ -39,6 +39,23 @@ it once). Only the encrypted `reference.enc.js` is committed; the plaintext
 catalog never leaves your machine.
 
 
+## Two label types
+
+A toggle at the top switches between:
+- **Product label · 60 × 83 mm** — the main sticker from a CSV/Excel upload (above).
+- **Item-code label · 50 × 25 mm** — dual-scannable item stickers from a Myntra
+  system-generated **barcode PDF** upload.
+
+### Item-code labels (dual QR + barcode)
+
+Upload the Myntra barcode PDF (one item barcode per page). The app reads each
+page's item code, seller SKU and description (via PDF.js), and regenerates each as
+a 50 × 25 mm sticker carrying **both** a **QR (2D)** and a **Code-128 (1D)** — both
+encoding the item code — plus the three text lines. Description is completed from
+the stored listing when the seller SKU matches. Print/download like product labels.
+Code: [`assets/itemlabel.js`](assets/itemlabel.js) + vendored `pdf.min.js` /
+`pdf.worker.min.js` (read PDF) and `qrcode.min.js` (QR).
+
 ## Direct printing (QZ Tray)
 
 Print stickers straight to a label printer — no PDF, no print dialog — via
