@@ -127,9 +127,19 @@
   });
   doConnect(true);   // soft auto-connect if QZ is already running + remembered
 
+  // Item labels print via raw TSPL (2-up TSC roll); product labels via PDF.
+  async function sendPrint(rows) {
+    if (MODE === "item") {
+      const tspl = window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies());
+      await LP.printRaw(tspl, selectedPrinter());
+    } else {
+      await LP.printDoc(buildMulti(rows), labelSize(), selectedPrinter(), copies());
+    }
+  }
+
   async function printRow(i) {
     if (!printConnected()) { $("qzInfo").innerHTML = '<span style="color:var(--warn)">Click “Connect printer” above first.</span>'; $("printCard").scrollIntoView({behavior:"smooth"}); return; }
-    try { await LP.printDoc(buildOne(ROWS[i]), labelSize(), selectedPrinter(), copies()); }
+    try { await sendPrint([ROWS[i]]); }
     catch (e) { $("genMsg").innerHTML = '<span style="color:var(--err)">Print failed: ' + esc(e.message || e) + "</span>"; }
   }
 
@@ -137,7 +147,7 @@
     if (!printConnected()) return;
     $("printAllBtn").disabled = true; $("genMsg").textContent = "Sending " + ROWS.length + " labels to the printer…";
     try {
-      await LP.printDoc(buildMulti(ROWS), labelSize(), selectedPrinter(), copies());
+      await sendPrint(ROWS);
       $("genMsg").innerHTML = "✅ Sent " + ROWS.length + " labels to <b>" + esc(selectedPrinter()) + "</b>.";
     } catch (e) {
       $("genMsg").innerHTML = '<span style="color:var(--err)">Print failed: ' + esc(e.message || e) + "</span>";

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -32,7 +32,8 @@
       <b>Only have a list of SKUs?</b> Load a reference below, then upload the list — missing details (brand, MRP, style…) are filled in automatically.</div>
     <div class="sub hidden" id="helpItem">Upload the <b>Myntra system-generated barcode PDF</b> (one item barcode per page).
       Each item code becomes a 50 × 25 mm sticker with your chosen scannable code (encoding the item code),
-      plus the item code, seller SKU and description. Description is completed from your stored listing when the SKU matches.</div>
+      plus the item code, seller SKU and description. Description is completed from your stored listing when the SKU matches.<br>
+      <b>Printing</b> is set up for a <b>2-up 50 × 25 mm roll on a TSC (TE244)</b> — <b>Print all</b> lays two labels per row and sends raw TSPL to the printer.</div>
     <div class="hidden" id="codeTypeRow" style="margin:2px 0 14px;font-size:13px;display:flex;gap:16px;align-items:center;">
       <b>Code on the label:</b>
       <label style="cursor:pointer"><input type="radio" name="codeType" value="barcode" checked> Linear barcode (1D)</label>
@@ -139,12 +140,13 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=3"></script>
+<script src="assets/config.js?v=4"></script>
 <script src="assets/reference.enc.js"></script>
-<script src="assets/parse.js?v=3"></script>
-<script src="assets/label.js?v=3"></script>
-<script src="assets/itemlabel.js?v=3"></script>
-<script src="assets/print.js?v=3"></script>
-<script src="assets/app.js?v=3"></script>
+<script src="assets/parse.js?v=4"></script>
+<script src="assets/label.js?v=4"></script>
+<script src="assets/itemlabel.js?v=4"></script>
+<script src="assets/tsc.js?v=4"></script>
+<script src="assets/print.js?v=4"></script>
+<script src="assets/app.js?v=4"></script>
 </body>
 </html>

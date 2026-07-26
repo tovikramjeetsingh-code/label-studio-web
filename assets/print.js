@@ -65,11 +65,19 @@
     await qz.print(_config(p, size, copies), _pdfData(doc));
   }
 
+  // Send raw printer-language commands (e.g. TSPL for a TSC printer).
+  async function printRaw(command, printer) {
+    if (!isConnected()) await connect();
+    const p = printer || savedPrinter();
+    if (!p) throw new Error("No printer selected.");
+    await qz.print(qz.configs.create(p), [{ type: "raw", format: "command", flavor: "plain", data: command }]);
+  }
+
   async function disconnect() { try { if (isConnected()) await qz.websocket.disconnect(); } catch (e) {} }
 
   window.LabelPrint = {
     available, isConnected, connect, disconnect,
     listPrinters, defaultPrinter, savedPrinter, savePrinter,
-    printDoc,
+    printDoc, printRaw,
   };
 })();
