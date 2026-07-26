@@ -106,11 +106,14 @@
     const W = 25, H = 15, M = 1;
     const item = String(rec["item code"] || ""), sku = String(rec["seller sku code"] || "");
     if (codeType === "qr") {
-      const qrSize = 10, qrX = M, qrY = 1;
+      // large QR filling the sticker height on the left; item code + SKU on the right
+      const qrSize = 12.6, qrX = M, qrY = (H - qrSize) / 2;
       if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
-      doc.setFont("helvetica", "bold"); doc.setFontSize(5.8); doc.text(item, qrX + qrSize + 1, 6.5);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(5);
-      doc.text(doc.splitTextToSize(sku, W - 2 * M).slice(0, 1), W / 2, 13.6, { align: "center" });
+      const rx = qrX + qrSize + 1, rw = W - M - rx;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(5); doc.text(item, rx, 5.5);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(4.4);
+      let y = 8.6;
+      doc.splitTextToSize(sku, rw).slice(0, 3).forEach((ln) => { doc.text(ln, rx, y); y += 2.3; });
     } else {
       const side = 1, bw = W - 2 * side;
       if (item) { try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", side, 1.5, bw, 6.5); } catch (e) {} }
