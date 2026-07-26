@@ -107,12 +107,16 @@
     const item = String(rec["item code"] || ""), sku = String(rec["seller sku code"] || "");
     if (codeType === "qr") {
       // large QR filling the sticker height on the left; item code + SKU on the right
-      const qrSize = 12.6, qrX = M, qrY = (H - qrSize) / 2;
+      const qrSize = 11.8, qrX = 0.8, qrY = (H - qrSize) / 2;
       if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
-      const rx = qrX + qrSize + 1, rw = W - M - rx;
-      doc.setFont("helvetica", "bold"); doc.setFontSize(5); doc.text(item, rx, 5.5);
+      const rx = qrX + qrSize + 0.7, rw = W - 0.5 - rx;
+      // item code: shrink font until it fits the column (never clips)
+      doc.setFont("helvetica", "bold");
+      let fs = 5.8; doc.setFontSize(fs);
+      while (doc.getTextWidth(item) > rw && fs > 3.6) { fs -= 0.2; doc.setFontSize(fs); }
+      doc.text(item, rx, 5.2);
       doc.setFont("helvetica", "normal"); doc.setFontSize(4.4);
-      let y = 8.6;
+      let y = 8.4;
       doc.splitTextToSize(sku, rw).slice(0, 3).forEach((ln) => { doc.text(ln, rx, y); y += 2.3; });
     } else {
       const side = 1, bw = W - 2 * side;
