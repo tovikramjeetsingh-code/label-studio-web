@@ -127,13 +127,37 @@
   });
   doConnect(true);   // soft auto-connect if QZ is already running + remembered
 
-  // Item labels print via raw TSPL (2-up TSC roll); product labels via PDF.
+  // Rasterize one product label to a 203-dpi canvas (via PDF.js) for BITMAP TSPL.
+  async function labelToCanvas(row) {
+    const bytes = window.LabelRender.buildLabelDoc(row).output("arraybuffer");
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(1);
+    const vp1 = page.getViewport({ scale: 1 });
+    const dotsW = Math.round(60 * 203 / 25.4);           // 60mm at 203 dpi
+    const vp = page.getViewport({ scale: dotsW / vp1.width });
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+    const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height);
+    await page.render({ canvasContext: cx, viewport: vp }).promise;
+    return cv;
+  }
+
+  // Both label types print by talking straight to the printer (raw TSPL).
   async function sendPrint(rows) {
     if (MODE === "item") {
-      const tspl = window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies());
-      await LP.printRaw(tspl, selectedPrinter());
-    } else {
-      await LP.printDoc(buildMulti(rows), labelSize(), selectedPrinter(), copies());
+      // native TSPL text/barcode, 2-up
+      await LP.printRaw(window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies()), selectedPrinter());
+      return;
+    }
+    // product: render each label to a 203-dpi bitmap, send raw TSPL in chunks
+    const CHUNK = 20;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const slice = rows.slice(i, i + CHUNK);
+      const canvases = [];
+      for (const r of slice) canvases.push(await labelToCanvas(r));
+      const job = window.TSCLabel.buildBitmapTSPL(canvases, { w: 60, h: 83 }, copies());
+      await LP.printRawBytes(job, selectedPrinter());
+      $("genMsg").textContent = "Sent " + Math.min(i + CHUNK, rows.length) + " / " + rows.length + " to the printer…";
     }
   }
 

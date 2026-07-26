@@ -73,11 +73,24 @@
     await qz.print(qz.configs.create(p), [{ type: "raw", format: "command", flavor: "plain", data: command }]);
   }
 
+  // Send raw BYTES (e.g. TSPL with an embedded binary BITMAP) via base64.
+  function _u8ToB64(u8) {
+    let s = ""; const CH = 0x8000;
+    for (let i = 0; i < u8.length; i += CH) s += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+    return btoa(s);
+  }
+  async function printRawBytes(bytes, printer) {
+    if (!isConnected()) await connect();
+    const p = printer || savedPrinter();
+    if (!p) throw new Error("No printer selected.");
+    await qz.print(qz.configs.create(p), [{ type: "raw", format: "command", flavor: "base64", data: _u8ToB64(bytes) }]);
+  }
+
   async function disconnect() { try { if (isConnected()) await qz.websocket.disconnect(); } catch (e) {} }
 
   window.LabelPrint = {
     available, isConnected, connect, disconnect,
     listPrinters, defaultPrinter, savedPrinter, savePrinter,
-    printDoc, printRaw,
+    printDoc, printRaw, printRawBytes,
   };
 })();
