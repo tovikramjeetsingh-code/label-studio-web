@@ -141,6 +141,19 @@
   });
   doConnect(true);   // soft auto-connect if QZ is already running + remembered
 
+  // alignment nudge (mm) — persisted, applied to raw TSPL
+  const OFFSET_KEY = "labelStudioOffset_v1";
+  function applyOffset() {
+    const x = parseFloat($("offX").value) || 0, y = parseFloat($("offY").value) || 0;
+    window.TSCLabel.setOffset(x, y);
+    try { localStorage.setItem(OFFSET_KEY, JSON.stringify({ x, y })); } catch (e) {}
+  }
+  (function () {
+    try { const o = JSON.parse(localStorage.getItem(OFFSET_KEY) || "null"); if (o) { $("offX").value = o.x; $("offY").value = o.y; } } catch (e) {}
+    applyOffset();
+    ["offX", "offY"].forEach((id) => $(id).addEventListener("change", applyOffset));
+  })();
+
   // Rasterize a jsPDF doc to a 203-dpi canvas (via PDF.js) for BITMAP TSPL.
   async function docToCanvas(doc, widthMm) {
     const pdf = await pdfjsLib.getDocument({ data: doc.output("arraybuffer") }).promise;
@@ -186,6 +199,7 @@
 
   // Every label type prints by talking straight to the printer (raw TSPL).
   async function sendPrint(rows) {
+    applyOffset();   // use the latest alignment nudge
     if (MODE === "rack") {
       await print4up(rows, (r) => window.ItemLabel.buildRackDoc(r));
       return;

@@ -21,6 +21,12 @@
   const D = (mm) => Math.round(mm * G.dpi / 25.4);   // mm -> dots
   const clean = (s) => String(s == null ? "" : s).replace(/["\\\r\n]/g, " ").trim();
 
+  // user alignment nudge (mm): +X moves content right, +Y moves it down
+  const OFFSET = { x: 0, y: 0 };
+  function setOffset(x, y) { OFFSET.x = parseFloat(x) || 0; OFFSET.y = parseFloat(y) || 0; }
+  const offX = () => Math.max(0, D(OFFSET.x));   // REFERENCE/BITMAP x must be >= 0
+  const offY = () => D(OFFSET.y);                // SHIFT accepts negative (up)
+
   // Commands for ONE label whose left edge is at `lx` dots.
   function labelCmds(lx, rec, codeType) {
     const item = clean(rec["item code"]);
@@ -53,7 +59,8 @@
       `SIZE ${G.mediaW} mm,${G.labelH} mm`,
       `GAP ${G.rowGap} mm,0 mm`,
       `DIRECTION ${G.direction}`,
-      `REFERENCE 0,0`,
+      `REFERENCE ${offX()},0`,
+      `SHIFT ${offY()}`,
       `DENSITY ${G.density}`,
       `SPEED ${G.speed}`,
       `CODEPAGE 1252`,
@@ -111,10 +118,10 @@
     const gap = gapMm == null ? PROD.gap : gapMm;
     const parts = [enc(
       `SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\nGAP ${gap} mm,0 mm\r\n` +
-      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`)];
+      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT ${offY()}\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`)];
     canvases.forEach((cv, i) => {
       const { wbytes, h, bytes } = canvasToBitmap(cv);
-      parts.push(enc(`CLS\r\nBITMAP 0,0,${wbytes},${h},0,`));
+      parts.push(enc(`CLS\r\nBITMAP ${offX()},0,${wbytes},${h},0,`));
       parts.push(bytes);
       parts.push(enc(`\r\nPRINT 1,${nOf(i)}\r\n`));
     });
@@ -148,5 +155,5 @@
     return buildBitmapTSPL(rows, { w: mediaW, h: g.labelH }, copies, g.rowGap);
   }
 
-  window.TSCLabel = { geom: G, prod: PROD, rolls: ROLLS, buildItemTSPL, buildBitmapTSPL, buildMultiUpBitmapTSPL };
+  window.TSCLabel = { geom: G, prod: PROD, rolls: ROLLS, setOffset, offset: OFFSET, buildItemTSPL, buildBitmapTSPL, buildMultiUpBitmapTSPL };
 })();
