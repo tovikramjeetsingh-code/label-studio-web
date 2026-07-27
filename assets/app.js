@@ -17,9 +17,12 @@
   function itemCodeType() { return radioVal("codeType", localStorage.getItem(ITEMCODE_KEY) || "barcode"); }
   function itemSizeKey() { return radioVal("itemSize", localStorage.getItem(ITEMSIZE_KEY) || "50x25"); }
 
-  const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r, itemCodeType(), itemSizeKey()) : window.LabelRender.buildLabelDoc(r);
-  const buildMulti = (rs) => MODE === "item" ? window.ItemLabel.buildItemDocMulti(rs, itemCodeType(), itemSizeKey()) : window.LabelRender.buildLabelDocMulti(rs);
-  const labelSize = () => MODE === "item" ? window.ItemLabel.sizeOf(itemSizeKey()) : { w: 60, h: 83 };
+  const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r, itemCodeType(), itemSizeKey())
+                        : MODE === "rack" ? window.ItemLabel.buildRackDoc(r)
+                        : window.LabelRender.buildLabelDoc(r);
+  const labelSize = () => MODE === "item" ? window.ItemLabel.sizeOf(itemSizeKey())
+                        : MODE === "rack" ? { w: 25, h: 15 }
+                        : { w: 60, h: 83 };
 
   // restore + persist the item-code type and size choices
   (function () {
@@ -37,6 +40,7 @@
     document.querySelectorAll(".modebtn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
     $("helpProduct").classList.toggle("hidden", mode !== "product");
     $("helpItem").classList.toggle("hidden", mode !== "item");
+    $("helpRack").classList.toggle("hidden", mode !== "rack");
     $("codeTypeRow").classList.toggle("hidden", mode !== "item");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
     $("dropHint").textContent = mode === "item" ? ".pdf" : ".csv · .xlsx";
@@ -159,21 +163,29 @@
     }
   }
 
-  // Both label types print by talking straight to the printer (raw TSPL).
+  // 4-up 25x15: render each label, composite rows, BITMAP TSPL, chunked with progress.
+  async function print4up(rows, buildDoc) {
+    const CHUNK = 20;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const canvases = [];
+      for (const r of rows.slice(i, i + CHUNK)) canvases.push(await docToCanvas(buildDoc(r), 25));
+      await LP.printRawBytes(window.TSCLabel.buildMultiUpBitmapTSPL(canvases, "25x15", copies()), selectedPrinter());
+      $("genMsg").textContent = "Sent " + Math.min(i + CHUNK, rows.length) + " / " + rows.length + " to the printer…";
+    }
+  }
+
+  // Every label type prints by talking straight to the printer (raw TSPL).
   async function sendPrint(rows) {
+    if (MODE === "rack") {
+      await print4up(rows, (r) => window.ItemLabel.buildRackDoc(r));
+      return;
+    }
     if (MODE === "item") {
       if (itemSizeKey() === "50x25") {
-        // native TSPL text/barcode, 2-up
-        await LP.printRaw(window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies()), selectedPrinter());
+        await LP.printRaw(window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies()), selectedPrinter());  // native 2-up
       } else {
-        // 25x15 — 4-up: render each label, composite rows, BITMAP TSPL, chunked
-        const CHUNK = 20, ct = itemCodeType();
-        for (let i = 0; i < rows.length; i += CHUNK) {
-          const canvases = [];
-          for (const r of rows.slice(i, i + CHUNK)) canvases.push(await docToCanvas(window.ItemLabel.buildItemDoc(r, ct, "25x15"), 25));
-          await LP.printRawBytes(window.TSCLabel.buildMultiUpBitmapTSPL(canvases, "25x15", copies()), selectedPrinter());
-          $("genMsg").textContent = "Sent " + Math.min(i + CHUNK, rows.length) + " / " + rows.length + " to the printer…";
-        }
+        const ct = itemCodeType();
+        await print4up(rows, (r) => window.ItemLabel.buildItemDoc(r, ct, "25x15"));
       }
       return;
     }
@@ -229,6 +241,16 @@
       resetDrop();
       ROWS = items;
       renderReview(file.name, items.length + " item codes", [], 0);
+      return;
+    }
+
+    if (MODE === "rack") {
+      let res;
+      try { res = await window.LabelParse.parseRack(file); }
+      catch (e) { uploadErr(e); return; }
+      resetDrop();
+      ROWS = res.rows;
+      renderReview(file.name, "Rack", [], 0);
       return;
     }
 
@@ -292,7 +314,7 @@
 
   function renderReview(filename, format, problems, enriched) {
     $("reviewCard").classList.remove("hidden"); $("genCard").classList.remove("hidden");
-    const kind = MODE === "item" ? "Item-code" : format;
+    const kind = MODE === "item" ? "Item-code" : MODE === "rack" ? "Rack" : format;
     $("fileBadge").textContent = filename + " · " + kind + " · " + ROWS.length + " labels";
 
     const notes = [];
@@ -309,7 +331,16 @@
     const thead = $("tbl").querySelector("thead");
     const tb = $("tbl").querySelector("tbody"); tb.innerHTML = "";
 
-    if (MODE === "item") {
+    if (MODE === "rack") {
+      thead.innerHTML = "<tr><th>#</th><th></th><th>Rack code (barcode)</th><th>Caption</th></tr>";
+      ROWS.forEach((r, i) => {
+        const tr = document.createElement("tr");
+        if (!r.code) tr.classList.add("bad");
+        tr.innerHTML = '<td class="rownum">' + (i + 1) + "</td>" + actionCell(i) +
+          "<td><b>" + esc(r.code) + "</b></td><td>" + esc(r.sub) + "</td>";
+        tb.appendChild(tr);
+      });
+    } else if (MODE === "item") {
       thead.innerHTML = "<tr><th>#</th><th></th><th>Item Code</th><th>Seller SKU</th><th>Description</th></tr>";
       ROWS.forEach((r, i) => {
         const tr = document.createElement("tr");

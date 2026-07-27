@@ -204,6 +204,22 @@
 
   function masterMeta() { const m = master(); return m ? m.meta : null; }
 
+  // ---- free-style rack labels: CSV/Excel, first column = barcode + text ----
+  async function parseRack(file) {
+    const { columns, rows } = await readFile(file);
+    const cols = columns.map(String).filter((c) => String(c).trim());
+    if (!cols.length) throw new Error("The file has no columns.");
+    const out = [];
+    rows.forEach((r) => {
+      const code = cleanCell(r[cols[0]]);
+      if (!code) return;
+      const sub = cols[1] ? cleanCell(r[cols[1]]) : "";
+      out.push({ code, sub, _filename: code.replace(/[\\/:*?"<>|]/g, "_") });
+    });
+    if (!out.length) throw new Error("No codes found — put the rack code in the first column.");
+    return { rows: out, count: out.length };
+  }
+
   // ---- stored reference: build from listing file(s), persist in this browser ----
   const LS_KEY = "labelStudioMaster_v1";
 
@@ -289,5 +305,6 @@
     parseUpload, applyMapping, cleanCell, masterMeta,
     buildMasterFromFiles, saveMaster, loadMasterFromStorage, clearMaster,
     unlockReference, tryAutoUnlock, hasEncrypted, forgetPassword,
+    parseRack,
   };
 })();
