@@ -103,7 +103,10 @@
     const ready = printConnected() && ROWS.length > 0;
     $("printAllBtn").disabled = !ready;
     $("printAllBtn").title = printConnected() ? "" : "Connect a printer above first";
+    updateCopiesUI();
   }
+  // Global Copies applies to item/rack; product uses the per-row Copies column.
+  function updateCopiesUI() { $("qzCopiesWrap").classList.toggle("hidden", !(printConnected() && MODE !== "product")); }
 
   async function populatePrinters() {
     const printers = await LP.listPrinters();
@@ -114,7 +117,7 @@
     if (!printers.length) { $("qzInfo").innerHTML = '<span style="color:var(--warn)">Connected, but no printers found on this machine.</span>'; return; }
     if (!want && printers[0]) sel.value = printers[0];
     LP.savePrinter(sel.value);
-    sel.classList.remove("hidden"); $("qzCopiesWrap").classList.remove("hidden");
+    sel.classList.remove("hidden"); updateCopiesUI();
     $("qzInfo").innerHTML = "✅ Connected to QZ Tray. Printing to <b>" + esc(sel.value) + "</b>.";
   }
 
@@ -152,14 +155,21 @@
     return cv;
   }
 
+  // per-label copy count (product uses the file's Quantity / the editable column)
+  const rowQty = (r) => Math.max(1, parseInt(r._qty, 10) || 1);
+
   // Render rows to bitmaps and send as raw TSPL, chunked with progress.
+  // Each label prints its own copy count (rowQty).
   async function printBitmaps(rows, buildDoc, sizeMm, gapMm) {
     const CHUNK = 20;
     for (let i = 0; i < rows.length; i += CHUNK) {
+      const slice = rows.slice(i, i + CHUNK);
       const canvases = [];
-      for (const r of rows.slice(i, i + CHUNK)) canvases.push(await docToCanvas(buildDoc(r), sizeMm.w));
-      await LP.printRawBytes(window.TSCLabel.buildBitmapTSPL(canvases, sizeMm, copies(), gapMm), selectedPrinter());
-      $("genMsg").textContent = "Sent " + Math.min(i + CHUNK, rows.length) + " / " + rows.length + " to the printer…";
+      for (const r of slice) canvases.push(await docToCanvas(buildDoc(r), sizeMm.w));
+      const copiesArr = slice.map(rowQty);
+      await LP.printRawBytes(window.TSCLabel.buildBitmapTSPL(canvases, sizeMm, copiesArr, gapMm), selectedPrinter());
+      const done = Math.min(i + CHUNK, rows.length);
+      $("genMsg").textContent = "Sent " + done + " / " + rows.length + " labels (×copies) to the printer…";
     }
   }
 
@@ -352,7 +362,7 @@
         tb.appendChild(tr);
       });
     } else {
-      thead.innerHTML = "<tr><th>#</th><th></th><th>Seller SKU</th><th>SKU Code (barcode)</th><th>Size</th>" +
+      thead.innerHTML = "<tr><th>#</th><th></th><th>Copies</th><th>Seller SKU</th><th>SKU Code (barcode)</th><th>Size</th>" +
         "<th>MRP</th><th>Brand</th><th>Article Type</th><th>Style Name</th><th>Style ID</th><th>Month &amp; Year</th></tr>";
       const req = ["seller sku code", "sku code", "size", "mrp"];
       ROWS.forEach((r, i) => {
@@ -360,6 +370,7 @@
         if (req.some((c) => !r[c])) tr.classList.add("bad");
         tr.innerHTML =
           '<td class="rownum">' + (i + 1) + "</td>" + actionCell(i) +
+          '<td><input class="qty" type="number" min="1" value="' + (r._qty || 1) + '" data-i="' + i + '" style="width:52px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px"></td>' +
           "<td><b>" + esc(r["seller sku code"]) + "</b></td>" +
           "<td>" + esc(r["sku code"]) + "</td><td>" + esc(r.size) + "</td>" +
           "<td>₹" + esc(r.mrp) + "</td><td>" + esc(r.brand) + "</td>" +
@@ -370,6 +381,9 @@
     }
     tb.querySelectorAll("a.pv").forEach((a) => a.addEventListener("click", () => openPreview(+a.dataset.i)));
     tb.querySelectorAll("a.pr").forEach((a) => a.addEventListener("click", () => printRow(+a.dataset.i)));
+    tb.querySelectorAll("input.qty").forEach((inp) => inp.addEventListener("change", () => {
+      const v = Math.max(1, parseInt(inp.value, 10) || 1); inp.value = v; ROWS[+inp.dataset.i]._qty = v;
+    }));
 
     $("genBtn").disabled = false; $("genBtn").style.display = "";
     $("prog").style.display = "none"; $("progFill").style.width = "0%";
@@ -394,15 +408,20 @@
   $("genBtn").addEventListener("click", async () => {
     $("genBtn").disabled = true; $("prog").style.display = "block";
     $("downloadBtn").style.display = "none"; ZIP_BLOB = null;
-    const zip = new JSZip(), used = {};
+    const zip = new JSZip(), used = {}; let total = 0;
     for (let i = 0; i < ROWS.length; i++) {
       const r = ROWS[i];
-      let base = (r._filename || r["seller sku code"] || r["item code"] || ("label_" + (i + 1))).replace(/[\\/:*?"<>|]/g, "_");
-      let name = base, n = 2;
-      while (used[name]) { name = base + "_" + n; n++; }
-      used[name] = 1;
-      const doc = buildOne(r);
-      zip.file(name + ".pdf", doc.output("blob"));
+      const qty = MODE === "product" ? Math.max(1, parseInt(r._qty, 10) || 1) : 1;
+      const base0 = (r._filename || r["seller sku code"] || r["item code"] || ("label_" + (i + 1))).replace(/[\\/:*?"<>|]/g, "_");
+      const blob = buildOne(r).output("blob");   // build once, add qty times
+      for (let c = 0; c < qty; c++) {
+        let base = qty > 1 ? base0 + "-" + (c + 1) : base0;
+        let name = base, n = 2;
+        while (used[name]) { name = base + "_" + n; n++; }
+        used[name] = 1;
+        zip.file(name + ".pdf", blob);
+        total++;
+      }
       $("progFill").style.width = Math.round(100 * (i + 1) / ROWS.length) + "%";
       $("genMsg").textContent = (i + 1) + " / " + ROWS.length + " labels…";
       if (i % 15 === 0) await sleep(0);   // let the UI paint
@@ -410,7 +429,7 @@
     $("genMsg").textContent = "Zipping…";
     ZIP_BLOB = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
     $("prog").style.display = "none";
-    $("genMsg").textContent = "✅ " + ROWS.length + " labels ready.";
+    $("genMsg").textContent = "✅ " + total + " labels ready.";
     $("genBtn").style.display = "none";
     $("downloadBtn").style.display = "inline-block";
   });

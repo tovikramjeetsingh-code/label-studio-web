@@ -115,13 +115,24 @@
     return row;
   }
 
-  function rowsFromColmap(rawRows, colmap, monthMode) {
+  const QTY_ALIASES = ["quantity", "qty", "copies", "count", "print qty", "print quantity", "qnty"];
+  function findQtyCol(lookup) {
+    for (const a of QTY_ALIASES) if (lookup[a]) return lookup[a];
+    return null;
+  }
+  function parseQty(v) {
+    const n = parseInt(cleanCell(v), 10);
+    return (isNaN(n) || n < 1) ? 1 : n;
+  }
+
+  function rowsFromColmap(rawRows, colmap, monthMode, qtyCol) {
     const out = [];
     rawRows.forEach((r, i) => {
       const row = blankRow();
       for (const canon in colmap) row[canon] = cleanCell(r[colmap[canon]]);
       if (!anyVal(row)) return;
       row._srcrow = i + 2;
+      row._qty = qtyCol ? parseQty(r[qtyCol]) : 1;
       if (monthMode === "current") row["month & year of manufacture"] = currentMonthYear();
       out.push(row);
     });
@@ -142,12 +153,13 @@
     if (!rows.length) throw new Error("The file has no data rows.");
     const lookup = buildLookup(columns);
     const hasAll = (sig) => sig.every((s) => s in lookup);
+    const qtyCol = findQtyCol(lookup);   // per-label copies (Quantity/Qty/Copies…)
 
     // 1. Myntra STN Summary
     if (hasAll(C.STN_SIGNATURE)) {
       const cm = {};
       for (const canon in C.STN_COLUMNS) cm[canon] = lookup[C.STN_COLUMNS[canon]];
-      const built = rowsFromColmap(rows, cm, "current");
+      const built = rowsFromColmap(rows, cm, "current", qtyCol);
       built.forEach((row) => { row._filename = row.size ? row["seller sku code"] + "-" + row.size : row["seller sku code"]; });
       return finalize(built, "Myntra STN Summary");
     }
@@ -155,20 +167,20 @@
     // 2. Seller Listings Report
     if (hasAll(C.LISTINGS_SIGNATURE)) {
       const cm = partialColmap(lookup); delete cm["month & year of manufacture"];
-      return finalize(rowsFromColmap(rows, cm, "current"), "Seller Listings Report");
+      return finalize(rowsFromColmap(rows, cm, "current", qtyCol), "Seller Listings Report");
     }
 
     // 3. Original Label Template (every required column present)
     const full = partialColmap(lookup);
     if (Object.keys(full).length === Object.keys(C.REQUIRED_COLUMNS).length) {
-      return finalize(rowsFromColmap(rows, full, "file"), "Label Template");
+      return finalize(rowsFromColmap(rows, full, "file", qtyCol), "Label Template");
     }
 
     // 4. Stored-reference lookup — file has a SKU key column; fill the rest.
     const keyCol = C.REQUIRED_COLUMNS["seller sku code"].find((a) => lookup[a])
                 || C.REQUIRED_COLUMNS["sku code"].find((a) => lookup[a]);
     if (master() && master().meta.count && keyCol) {
-      return finalize(rowsFromColmap(rows, partialColmap(lookup), "file"), "SKU lookup");
+      return finalize(rowsFromColmap(rows, partialColmap(lookup), "file", qtyCol), "SKU lookup");
     }
 
     // 5. Unknown -> manual column mapping
@@ -199,7 +211,8 @@
       const chosen = mapping[fs.field];
       if (chosen && chosen !== "__current__") colmap[fs.field] = chosen;
     });
-    return finalize(rowsFromColmap(rawRows, colmap, "file"), "Custom mapping");
+    const qtyCol = rawRows.length ? findQtyCol(buildLookup(Object.keys(rawRows[0]))) : null;
+    return finalize(rowsFromColmap(rawRows, colmap, "file", qtyCol), "Custom mapping");
   }
 
   function masterMeta() { const m = master(); return m ? m.meta : null; }

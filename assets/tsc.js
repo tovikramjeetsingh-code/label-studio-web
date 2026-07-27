@@ -105,17 +105,18 @@
   }
 
   // Build a raw TSPL job (bytes) that prints the given canvases at sizeMm.
+  // `copies` is a number (same for all) OR an array of per-canvas copy counts.
   function buildBitmapTSPL(canvases, sizeMm, copies, gapMm) {
-    const n = Math.max(1, copies || 1);
+    const nOf = (i) => { const c = Array.isArray(copies) ? copies[i] : copies; return Math.max(1, c || 1); };
     const gap = gapMm == null ? PROD.gap : gapMm;
     const parts = [enc(
       `SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\nGAP ${gap} mm,0 mm\r\n` +
       `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`)];
-    canvases.forEach((cv) => {
+    canvases.forEach((cv, i) => {
       const { wbytes, h, bytes } = canvasToBitmap(cv);
       parts.push(enc(`CLS\r\nBITMAP 0,0,${wbytes},${h},0,`));
       parts.push(bytes);
-      parts.push(enc(`\r\nPRINT 1,${n}\r\n`));
+      parts.push(enc(`\r\nPRINT 1,${nOf(i)}\r\n`));
     });
     return concat(parts);
   }
