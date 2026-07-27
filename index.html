@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 
@@ -37,8 +37,8 @@
       <b>50 × 25 mm</b> shows item code + seller SKU + description; <b>25 × 15 mm</b> shows the code + item code + seller SKU.
       <b>Print all</b> sends raw TSPL straight to your TSC printer (50 × 25 prints 2-up, 25 × 15 prints 4-up).</div>
     <div class="sub hidden" id="helpRack">Free-style <b>rack / location labels</b>. Upload a CSV or Excel where the
-      <b>first column is the rack code</b> (barcoded + printed big). An optional <b>second column</b> prints as a small caption.
-      Each row becomes a 25 × 15 mm 1D-barcode sticker; <b>Print all</b> runs them 4-up on the same TSC roll.</div>
+      <b>first column is the rack code</b> (encoded + printed big). An optional <b>second column</b> prints as a small caption.
+      Pick <b>1D barcode</b> or <b>QR (2D)</b> below. Each row becomes a 25 × 15 mm sticker; <b>Print all</b> runs them 4-up on the same TSC roll.</div>
     <div class="hidden" id="itemSizeRow" style="margin:2px 0 8px;font-size:13px;display:flex;gap:16px;align-items:center;">
       <b>Label size:</b>
       <label style="cursor:pointer"><input type="radio" name="itemSize" value="50x25" checked> 50 × 25 mm</label>
@@ -156,13 +156,13 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=12"></script>
+<script src="assets/config.js?v=13"></script>
 <script src="assets/reference.enc.js"></script>
-<script src="assets/parse.js?v=12"></script>
-<script src="assets/label.js?v=12"></script>
-<script src="assets/itemlabel.js?v=12"></script>
-<script src="assets/tsc.js?v=12"></script>
-<script src="assets/print.js?v=12"></script>
-<script src="assets/app.js?v=12"></script>
+<script src="assets/parse.js?v=13"></script>
+<script src="assets/label.js?v=13"></script>
+<script src="assets/itemlabel.js?v=13"></script>
+<script src="assets/tsc.js?v=13"></script>
+<script src="assets/print.js?v=13"></script>
+<script src="assets/app.js?v=13"></script>
 </body>
 </html>

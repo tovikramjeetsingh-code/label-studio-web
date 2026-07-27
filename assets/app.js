@@ -18,7 +18,7 @@
   function itemSizeKey() { return radioVal("itemSize", localStorage.getItem(ITEMSIZE_KEY) || "50x25"); }
 
   const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r, itemCodeType(), itemSizeKey())
-                        : MODE === "rack" ? window.ItemLabel.buildRackDoc(r)
+                        : MODE === "rack" ? window.ItemLabel.buildRackDoc(r, itemCodeType())
                         : window.LabelRender.buildLabelDoc(r);
   const labelSize = () => MODE === "item" ? window.ItemLabel.sizeOf(itemSizeKey())
                         : MODE === "rack" ? { w: 25, h: 15 }
@@ -41,7 +41,7 @@
     $("helpProduct").classList.toggle("hidden", mode !== "product");
     $("helpItem").classList.toggle("hidden", mode !== "item");
     $("helpRack").classList.toggle("hidden", mode !== "rack");
-    $("codeTypeRow").classList.toggle("hidden", mode !== "item");
+    $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
     $("dropHint").textContent = mode === "item" ? ".pdf" : ".csv · .xlsx";
     $("fileInput").accept = mode === "item" ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
@@ -201,7 +201,8 @@
   async function sendPrint(rows) {
     applyOffset();   // use the latest alignment nudge
     if (MODE === "rack") {
-      await print4up(rows, (r) => window.ItemLabel.buildRackDoc(r));
+      const ct = itemCodeType();
+      await print4up(rows, (r) => window.ItemLabel.buildRackDoc(r, ct));
       return;
     }
     if (MODE === "item") {

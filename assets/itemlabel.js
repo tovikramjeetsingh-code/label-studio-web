@@ -132,22 +132,35 @@
     if (sizeKey === "25x15") draw25x15(doc, rec, ct); else draw50x25(doc, rec, ct);
   }
 
-  // ---- free-style rack label 25 x 15 mm : 1D barcode + code (+ subtitle) ----
-  function drawRack(doc, rec) {
+  // ---- free-style rack label 25 x 15 mm : 1D barcode or 2D QR + code (+ caption) ----
+  function drawRack(doc, rec, codeType) {
     const W = 25, H = 15, side = 1, bw = W - 2 * side;
     const code = String(rec.code || ""), sub = String(rec.sub || "");
-    if (code) { try { doc.addImage(window.LabelRender.barcodeDataURL(code), "PNG", side, 1.5, bw, 7); } catch (e) {} }
-    // code: big, auto-fit so it never clips
-    doc.setFont("helvetica", "bold");
-    let fs = sub ? 8.5 : 9.5; doc.setFontSize(fs);
-    while (doc.getTextWidth(code) > bw && fs > 4) { fs -= 0.3; doc.setFontSize(fs); }
-    doc.text(code, W / 2, sub ? 11.5 : 12.3, { align: "center" });
-    if (sub) {
-      doc.setFont("helvetica", "normal"); doc.setFontSize(6);
-      doc.text(doc.splitTextToSize(sub, bw).slice(0, 1), W / 2, 14.2, { align: "center" });
+    if (codeType === "qr") {
+      const qrSize = 11.8, qrX = 0.8, qrY = (H - qrSize) / 2;
+      if (code) { try { doc.addImage(qrDataURL(code), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
+      const rx = qrX + qrSize + 0.7, rw = W - 0.5 - rx;
+      doc.setFont("helvetica", "bold");
+      let fs = 7; doc.setFontSize(fs);
+      while (doc.getTextWidth(code) > rw && fs > 3.6) { fs -= 0.2; doc.setFontSize(fs); }
+      doc.text(code, rx, sub ? 5.5 : 8.4);
+      if (sub) {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(4.6);
+        let y = 8.6; doc.splitTextToSize(sub, rw).slice(0, 3).forEach((ln) => { doc.text(ln, rx, y); y += 2.4; });
+      }
+    } else {
+      if (code) { try { doc.addImage(window.LabelRender.barcodeDataURL(code), "PNG", side, 1.5, bw, 7); } catch (e) {} }
+      doc.setFont("helvetica", "bold");
+      let fs = sub ? 8.5 : 9.5; doc.setFontSize(fs);
+      while (doc.getTextWidth(code) > bw && fs > 4) { fs -= 0.3; doc.setFontSize(fs); }
+      doc.text(code, W / 2, sub ? 11.5 : 12.3, { align: "center" });
+      if (sub) {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(6);
+        doc.text(doc.splitTextToSize(sub, bw).slice(0, 1), W / 2, 14.2, { align: "center" });
+      }
     }
   }
-  function buildRackDoc(rec) { const d = newDoc(25, 15); drawRack(d, rec); return d; }
+  function buildRackDoc(rec, codeType) { const d = newDoc(25, 15); drawRack(d, rec, codeType || "barcode"); return d; }
 
   function newDoc(W, H) {
     const { jsPDF } = window.jspdf;
