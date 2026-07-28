@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
       Extra columns are ignored. <b>Any other file</b> → you'll be asked to match its columns to the label fields.<br>
       <b>Only have a list of SKUs?</b> Load a reference below, then upload the list — missing details (brand, MRP, style…) are filled in automatically.<br>
       <b>Copies per label:</b> a <b>Quantity</b>/<b>Qty</b>/<b>Copies</b> column sets how many of each label to print; you can also edit <b>Copies</b> per row in the review table. Print all prints that many of each.</div>
-    <div class="sub hidden" id="helpItem">Upload the <b>Myntra system-generated barcode PDF</b> (one item barcode per page).
+    <div class="sub hidden" id="helpItem">Upload the <b>Myntra system-generated barcode PDF(s)</b> — one item barcode per page. You can select/drop <b>several PDFs at once</b>; they're combined into one batch and laid out automatically.
       Each item code becomes a sticker in your chosen <b>size</b> and <b>code</b> (encoding the item code):
       <b>50 × 25 mm</b> shows item code + seller SKU + description; <b>25 × 15 mm</b> shows the code + item code + seller SKU.
       <b>Print all</b> sends raw TSPL straight to your TSC printer (50 × 25 prints 2-up, 25 × 15 prints 4-up).</div>
@@ -156,13 +156,14 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=13"></script>
+<script src="assets/config.js?v=14"></script>
 <script src="assets/reference.enc.js"></script>
-<script src="assets/parse.js?v=13"></script>
-<script src="assets/label.js?v=13"></script>
-<script src="assets/itemlabel.js?v=13"></script>
-<script src="assets/tsc.js?v=13"></script>
-<script src="assets/print.js?v=13"></script>
-<script src="assets/app.js?v=13"></script>
+<script src="assets/parse.js?v=14"></script>
+<script src="assets/label.js?v=14"></script>
+<script src="assets/itemlabel.js?v=14"></script>
+<script src="assets/tsc.js?v=14"></script>
+<script src="assets/qz-cert.js?v=14"></script>
+<script src="assets/print.js?v=14"></script>
+<script src="assets/app.js?v=14"></script>
 </body>
 </html>

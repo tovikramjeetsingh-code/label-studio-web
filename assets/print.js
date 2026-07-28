@@ -12,17 +12,39 @@
   function available() { return typeof qz !== "undefined"; }
   function isConnected() { return available() && qz.websocket.isActive(); }
 
-  function _configureUnsigned() {
-    // no certificate -> unsigned
-    qz.security.setCertificatePromise((resolve) => resolve());
-    // no signature -> unsigned (QZ prompts once; user can "remember")
-    qz.security.setSignaturePromise(() => (resolve) => resolve());
+  // Import the PKCS8 private key once (RSASSA-PKCS1-v1_5, SHA-512) for signing.
+  let _keyPromise = null;
+  function _privateKey() {
+    if (!_keyPromise) {
+      const der = Uint8Array.from(atob(window.QZ_KEY_B64), (c) => c.charCodeAt(0));
+      _keyPromise = crypto.subtle.importKey("pkcs8", der,
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-512" }, false, ["sign"]);
+    }
+    return _keyPromise;
+  }
+
+  function _configureSigned() {
+    if (window.QZ_CERT && window.QZ_KEY_B64) {
+      // Signed: QZ prompts ONCE per machine (Allow + Remember), then silent.
+      qz.security.setCertificatePromise((resolve) => resolve(window.QZ_CERT));
+      qz.security.setSignatureAlgorithm("SHA512");
+      qz.security.setSignaturePromise((toSign) => (resolve, reject) => {
+        _privateKey()
+          .then((key) => crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(toSign)))
+          .then((sig) => resolve(btoa(String.fromCharCode.apply(null, new Uint8Array(sig)))))
+          .catch(reject);
+      });
+    } else {
+      // Fallback: unsigned (prompts each time).
+      qz.security.setCertificatePromise((resolve) => resolve());
+      qz.security.setSignaturePromise(() => (resolve) => resolve());
+    }
   }
 
   let _configured = false;
   async function connect() {
     if (!available()) throw new Error("QZ Tray library not loaded.");
-    if (!_configured) { _configureUnsigned(); _configured = true; }
+    if (!_configured) { _configureSigned(); _configured = true; }
     if (!qz.websocket.isActive()) {
       await qz.websocket.connect();   // tries secure wss://localhost:8181 first
     }

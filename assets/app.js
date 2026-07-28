@@ -43,8 +43,9 @@
     $("helpRack").classList.toggle("hidden", mode !== "rack");
     $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
-    $("dropHint").textContent = mode === "item" ? ".pdf" : ".csv · .xlsx";
+    $("dropHint").textContent = (mode === "item" ? ".pdf" : ".csv · .xlsx") + (mode !== "product" ? " · multiple OK" : "");
     $("fileInput").accept = mode === "item" ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
+    $("fileInput").multiple = mode !== "product";
     ROWS = [];
     $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
     $("uploadToast").innerHTML = "";
@@ -243,9 +244,9 @@
   drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
   drop.addEventListener("drop", (e) => {
     e.preventDefault(); drop.classList.remove("drag");
-    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
   });
-  fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+  fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFiles(fileInput.files); });
 
   function resetDrop() { drop.querySelector(".big").textContent = "Drop file here or click to browse"; fileInput.value = ""; }
   function uploadErr(e) {
@@ -254,31 +255,37 @@
     $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
   }
 
-  async function handleFile(file) {
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList);
+    if (!files.length) return;
     $("uploadToast").innerHTML = "";
-    drop.querySelector(".big").textContent = 'Reading "' + file.name + '"…';
-    window._lastFile = file.name;
+    const label = files.length === 1 ? files[0].name : files.length + " files";
+    drop.querySelector(".big").textContent = "Reading " + label + "…";
+    window._lastFile = label;
 
+    // Item + Rack: combine ALL uploaded files into one batch (auto-aligned in the layout).
     if (MODE === "item") {
-      let items;
-      try { items = await window.ItemLabel.parsePDF(file); }
+      const all = [];
+      try { for (const f of files) all.push(...await window.ItemLabel.parsePDF(f)); }
       catch (e) { uploadErr(e); return; }
       resetDrop();
-      ROWS = items;
-      renderReview(file.name, items.length + " item codes", [], 0);
+      ROWS = all;
+      renderReview(label, all.length + " item codes", [], 0);
       return;
     }
-
     if (MODE === "rack") {
-      let res;
-      try { res = await window.LabelParse.parseRack(file); }
+      const all = [];
+      try { for (const f of files) all.push(...(await window.LabelParse.parseRack(f)).rows); }
       catch (e) { uploadErr(e); return; }
       resetDrop();
-      ROWS = res.rows;
-      renderReview(file.name, "Rack", [], 0);
+      ROWS = all;
+      renderReview(label, "Rack", [], 0);
       return;
     }
 
+    // Product: one file (mapping/format is per-file).
+    const file = files[0];
+    window._lastFile = file.name;
     let res;
     try { res = await window.LabelParse.parseUpload(file); }
     catch (e) { uploadErr(e); return; }
