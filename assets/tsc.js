@@ -155,5 +155,31 @@
     return buildBitmapTSPL(rows, { w: mediaW, h: g.labelH }, copies, g.rowGap);
   }
 
-  window.TSCLabel = { geom: G, prod: PROD, rolls: ROLLS, setOffset, offset: OFFSET, buildItemTSPL, buildBitmapTSPL, buildMultiUpBitmapTSPL };
+  // --- streaming primitives: build ONE raw job for a whole batch (one QZ prompt) ---
+  function bitmapHeader(sizeMm, gapMm) {
+    const gap = gapMm == null ? PROD.gap : gapMm;
+    return enc(`SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\nGAP ${gap} mm,0 mm\r\n` +
+      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT ${offY()}\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`);
+  }
+  function bitmapLabel(canvas, copies) {
+    const { wbytes, h, bytes } = canvasToBitmap(canvas);
+    return concat([enc(`CLS\r\nBITMAP ${offX()},0,${wbytes},${h},0,`), bytes,
+      enc(`\r\nPRINT 1,${Math.max(1, copies || 1)}\r\n`)]);
+  }
+  function mediaWidth(rollKey) { const g = ROLLS[rollKey]; return g.side * 2 + g.up * g.labelW + (g.up - 1) * g.mid; }
+  // Composite up to `up` label canvases into one row canvas (203 dpi).
+  function compositeRow(upCanvases, rollKey) {
+    const g = ROLLS[rollKey], dot = (mm) => Math.round(mm * G.dpi / 25.4);
+    const cv = document.createElement("canvas");
+    cv.width = dot(mediaWidth(rollKey)); cv.height = dot(g.labelH);
+    const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height);
+    upCanvases.forEach((c, j) => cx.drawImage(c, dot(g.side + j * (g.labelW + g.mid)), 0, dot(g.labelW), cv.height));
+    return cv;
+  }
+
+  window.TSCLabel = {
+    geom: G, prod: PROD, rolls: ROLLS, setOffset, offset: OFFSET,
+    buildItemTSPL, buildBitmapTSPL, buildMultiUpBitmapTSPL,
+    bitmapHeader, bitmapLabel, compositeRow, mediaWidth, concat,
+  };
 })();

@@ -172,30 +172,33 @@
   // per-label copy count (product uses the file's Quantity / the editable column)
   const rowQty = (r) => Math.max(1, parseInt(r._qty, 10) || 1);
 
-  // Render rows to bitmaps and send as raw TSPL, chunked with progress.
-  // Each label prints its own copy count (rowQty).
+  // Render rows to bitmaps and send as ONE raw TSPL job (one QZ prompt for the batch).
+  // Each label prints its own copy count (rowQty). Canvases are freed as we go.
   async function printBitmaps(rows, buildDoc, sizeMm, gapMm) {
-    const CHUNK = 20;
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const slice = rows.slice(i, i + CHUNK);
-      const canvases = [];
-      for (const r of slice) canvases.push(await docToCanvas(buildDoc(r), sizeMm.w));
-      const copiesArr = slice.map(rowQty);
-      await LP.printRawBytes(window.TSCLabel.buildBitmapTSPL(canvases, sizeMm, copiesArr, gapMm), selectedPrinter());
-      const done = Math.min(i + CHUNK, rows.length);
-      $("genMsg").textContent = "Sent " + done + " / " + rows.length + " labels (×copies) to the printer…";
+    const T = window.TSCLabel, parts = [T.bitmapHeader(sizeMm, gapMm)];
+    for (let i = 0; i < rows.length; i++) {
+      const cv = await docToCanvas(buildDoc(rows[i]), sizeMm.w);
+      parts.push(T.bitmapLabel(cv, rowQty(rows[i])));
+      $("genMsg").textContent = "Preparing " + (i + 1) + " / " + rows.length + "…";
+      if (i % 10 === 0) await new Promise((r) => setTimeout(r, 0));
     }
+    $("genMsg").textContent = "Sending to the printer…";
+    await LP.printRawBytes(T.concat(parts), selectedPrinter());
   }
 
-  // 4-up 25x15: render each label, composite rows, BITMAP TSPL, chunked with progress.
+  // 4-up 25x15: composite each row of labels, build ONE raw job (one QZ prompt).
   async function print4up(rows, buildDoc) {
-    const CHUNK = 20;
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const canvases = [];
-      for (const r of rows.slice(i, i + CHUNK)) canvases.push(await docToCanvas(buildDoc(r), 25));
-      await LP.printRawBytes(window.TSCLabel.buildMultiUpBitmapTSPL(canvases, "25x15", copies()), selectedPrinter());
-      $("genMsg").textContent = "Sent " + Math.min(i + CHUNK, rows.length) + " / " + rows.length + " to the printer…";
+    const T = window.TSCLabel, roll = "25x15", g = T.rolls[roll];
+    const parts = [T.bitmapHeader({ w: T.mediaWidth(roll), h: g.labelH }, g.rowGap)];
+    for (let i = 0; i < rows.length; i += g.up) {
+      const upc = [];
+      for (const r of rows.slice(i, i + g.up)) upc.push(await docToCanvas(buildDoc(r), g.labelW));
+      parts.push(T.bitmapLabel(T.compositeRow(upc, roll), copies()));
+      $("genMsg").textContent = "Preparing " + Math.min(i + g.up, rows.length) + " / " + rows.length + "…";
+      if (i % 40 === 0) await new Promise((r) => setTimeout(r, 0));
     }
+    $("genMsg").textContent = "Sending to the printer…";
+    await LP.printRawBytes(T.concat(parts), selectedPrinter());
   }
 
   // Every label type prints by talking straight to the printer (raw TSPL).
