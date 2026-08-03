@@ -41,14 +41,27 @@
     $("helpProduct").classList.toggle("hidden", mode !== "product");
     $("helpItem").classList.toggle("hidden", mode !== "item");
     $("helpRack").classList.toggle("hidden", mode !== "rack");
+    $("helpStn").classList.toggle("hidden", mode !== "stn");
+    $("helpFind").classList.toggle("hidden", mode !== "find");
+    $("findCard").classList.toggle("hidden", mode !== "find");
+    $("drop").classList.toggle("hidden", mode === "find");     // finder needs no upload
     $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
-    $("dropHint").textContent = (mode === "item" ? ".pdf" : ".csv · .xlsx") + (mode !== "product" ? " · multiple OK" : "");
+    $("dropHint").textContent = (mode === "item" ? ".pdf" : ".csv · .xlsx") + " · multiple OK";
     $("fileInput").accept = mode === "item" ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
-    $("fileInput").multiple = mode !== "product";
+    $("fileInput").multiple = true;
     ROWS = [];
     $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
+    $("scanCard").classList.add("hidden");
     $("uploadToast").innerHTML = "";
+    STN_INDEX = null;
+    // The STN file is optional — a scanned SKU code resolves from the bundled
+    // listings on its own, so open the scan station straight away.
+    if (mode === "stn") { SCANS = []; renderScans(); showScanCard("no STN loaded"); }
+    if (mode === "find") { FIND_ROWS = []; $("findTbl").querySelector("tbody").innerHTML = "";
+      $("findToast").innerHTML = ""; $("findPrintAll").classList.add("hidden");
+      $("findZip").classList.add("hidden"); refreshFindUI();
+      setTimeout(() => $("findInput").focus(), 50); }
     refreshPrintButtons();
   }
   document.querySelectorAll(".modebtn").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
@@ -58,41 +71,27 @@
   $("fxMfg").textContent = C.MANUFACTURED_BY;
   $("fxCountry").textContent = C.COUNTRY_OF_ORIGIN;
 
-  // stored reference — encrypted bundle, unlocked with the shared team password
+  // stored reference — bundled with the app, loads itself on startup
   function updateRef() {
     const meta = window.LabelParse.masterMeta();
+    const im = window.LabelParse.itemsMeta();
     if (meta && meta.count) {
       $("masterInfo").innerHTML = "✅ Reference active — <b>" + meta.count.toLocaleString() +
-        "</b> SKUs (updated " + esc(meta.built) + "). Missing fields are filled automatically.";
-      $("refLocked").classList.add("hidden");
-      $("refClear").classList.remove("hidden");
+        "</b> SKUs (updated " + esc(meta.built) + ")" +
+        (im ? " · <b>" + im.items.toLocaleString() + "</b> item barcodes (" + esc(im.built) + ")" : "") + ".";
     } else if (window.LabelParse.hasEncrypted()) {
-      $("masterInfo").textContent = "";
-      $("refLocked").classList.remove("hidden");
-      $("refClear").classList.add("hidden");
+      $("masterInfo").innerHTML = '<span style="color:var(--err)">✕ Reference failed to load — ' +
+        "the bundled key doesn't match this build.</span>";
     } else {
       $("masterInfo").textContent = "No reference is bundled with this site yet.";
-      $("refLocked").classList.add("hidden");
-      $("refClear").classList.add("hidden");
     }
   }
-  async function doUnlock() {
-    const pass = $("refPass").value;
-    if (!pass) return;
-    $("masterInfo").textContent = "Unlocking…";
-    try {
-      await window.LabelParse.unlockReference(pass);
-      $("refPass").value = "";
-      updateRef();
-    } catch (e) {
-      $("masterInfo").innerHTML = '<span style="color:var(--err)">✕ ' + esc(e.message) + "</span>";
-      $("refLocked").classList.remove("hidden");
-    }
-  }
-  (async () => { await window.LabelParse.tryAutoUnlock(); updateRef(); })();
-  $("refUnlock").addEventListener("click", doUnlock);
-  $("refPass").addEventListener("keydown", (e) => { if (e.key === "Enter") doUnlock(); });
-  $("refClear").addEventListener("click", () => { window.LabelParse.forgetPassword(); updateRef(); });
+  (async () => {
+    $("masterInfo").textContent = "Loading reference…";
+    await window.LabelParse.tryAutoUnlock();
+    updateRef();
+    refreshFindUI();
+  })();
 
   // ---- direct printing (QZ Tray) ----
   const LP = window.LabelPrint;
@@ -107,7 +106,10 @@
     updateCopiesUI();
   }
   // Global Copies applies to item/rack; product uses the per-row Copies column.
-  function updateCopiesUI() { $("qzCopiesWrap").classList.toggle("hidden", !(printConnected() && MODE !== "product")); }
+  function updateCopiesUI() {
+    const perRow = MODE === "product" || MODE === "stn";   // both use per-row copies
+    $("qzCopiesWrap").classList.toggle("hidden", !(printConnected() && !perRow));
+  }
 
   async function populatePrinters() {
     const printers = await LP.listPrinters();
@@ -252,9 +254,10 @@
   fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFiles(fileInput.files); });
 
   function resetDrop() { drop.querySelector(".big").textContent = "Drop file here or click to browse"; fileInput.value = ""; }
-  function uploadErr(e) {
+  function uploadErr(e, filename) {
     resetDrop();
-    $("uploadToast").innerHTML = '<div class="toast err">✕ ' + esc(e.message) + "</div>";
+    $("uploadToast").innerHTML = '<div class="toast err">✕ ' +
+      (filename ? esc(filename) + ": " : "") + esc(e.message) + "</div>";
     $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
   }
 
@@ -286,17 +289,326 @@
       return;
     }
 
-    // Product: one file (mapping/format is per-file).
-    const file = files[0];
-    window._lastFile = file.name;
-    let res;
-    try { res = await window.LabelParse.parseUpload(file); }
-    catch (e) { uploadErr(e); return; }
+    // STN scan: parse the STN file(s) into a lookup index, then wait for scans.
+    if (MODE === "stn") {
+      const all = [];
+      for (const f of files) {
+        let res;
+        try { res = await window.LabelParse.parseUpload(f); }
+        catch (e) { uploadErr(e, f.name); return; }
+        if (res.needsMapping) { uploadErr(new Error("not a recognised STN export"), f.name); return; }
+        res.rows.forEach((r) => { r._src = f.name; });
+        all.push(...res.rows);
+      }
+      resetDrop();
+      if (!all.length) { uploadErr(new Error("No rows found in the STN file(s).")); return; }
+      ROWS = all;
+      STN_INDEX = buildStnIndex(all);
+      SCANS = []; renderScans();
+      showScanCard(label);
+      return;
+    }
+
+    // Product: parse every file (format detected per file) into ONE batch.
+    // A single unrecognised file still goes to the manual-mapping step; when
+    // several are dropped at once the unrecognised ones are reported instead,
+    // since mapping is per-file and can't be applied across a mixed batch.
+    const all = [], problems = [], formats = [], unmapped = [];
+    let enriched = 0;
+    for (const f of files) {
+      let res;
+      try { res = await window.LabelParse.parseUpload(f); }
+      catch (e) { uploadErr(e, f.name); return; }
+      if (res.needsMapping) {
+        if (files.length === 1) { resetDrop(); renderMapping(f.name, res); return; }
+        unmapped.push(f.name); continue;
+      }
+      res.rows.forEach((r) => { r._src = f.name; });
+      all.push(...res.rows);
+      res.problems.forEach((p) => problems.push({ ...p, file: f.name }));
+      enriched += res.enriched || 0;
+      if (!formats.includes(res.format)) formats.push(res.format);
+    }
     resetDrop();
-    if (res.needsMapping) { renderMapping(file.name, res); return; }
+    if (!all.length) {
+      uploadErr(new Error("No recognised rows. Unreadable: " + unmapped.join(", ")));
+      return;
+    }
     $("mapCard").classList.add("hidden");
-    ROWS = res.rows;
-    renderReview(file.name, res.format, res.problems, res.enriched);
+    ROWS = all;
+    renderReview(label, formats.join(" + ") || "—", problems, enriched, {
+      files: files.length, unmapped, dupes: countDupes(all),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Manual finder: look a label up in the bundled catalog by seller SKU, SKU
+  // code, style ID or VAN — no file upload at all.
+  // ---------------------------------------------------------------------------
+  let FIND_ROWS = [];
+
+  function refreshFindUI() {
+    if (MODE !== "find") return;
+    const meta = window.LabelParse.masterMeta();
+    $("findBadge").textContent = meta && meta.count
+      ? meta.count.toLocaleString() + " SKUs · updated " + meta.built
+      : "catalog not loaded";
+  }
+
+  function runFind() {
+    const q = $("findInput").value.trim();
+    const res = window.LabelParse.searchReference(q);
+    FIND_ROWS = res.rows;
+    ROWS = res.rows;                      // so Print all / ZIP work on the results
+    const tb = $("findTbl").querySelector("tbody");
+    tb.innerHTML = "";
+    res.rows.forEach((r, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td class="rownum">' + (i + 1) + "</td>" + actionCell(i) +
+        '<td><input class="qty" type="number" min="1" value="' + (r._qty || 1) +
+        '" data-i="' + i + '" style="width:52px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px"></td>' +
+        "<td><b>" + esc(r["seller sku code"]) + "</b></td><td>" + esc(r["sku code"]) + "</td>" +
+        "<td>" + esc(r.size) + "</td><td>₹" + esc(r.mrp) + "</td><td>" + esc(r.brand) + "</td>" +
+        "<td>" + esc(r["style name"]) + "</td><td>" + esc(r["style id"]) + "</td>" +
+        "<td>" + esc(r._van || "") + "</td>";
+      tb.appendChild(tr);
+    });
+    // Row actions live on this table too — bind them the same way the review
+    // table does, or Preview/Print are dead links.
+    tb.querySelectorAll("a.pv").forEach((a) => a.addEventListener("click", () => openPreview(+a.dataset.i)));
+    tb.querySelectorAll("a.pr").forEach((a) => a.addEventListener("click", () => printRow(+a.dataset.i)));
+
+    const notes = [];
+    if (!q || q.length < 2) notes.push('<div class="toast warn">Type at least 2 characters.</div>');
+    else if (!res.rows.length) notes.push('<div class="toast err">✕ Nothing matched “' + esc(q) +
+      "”. Try the seller SKU, SKU code, style ID or VAN.</div>");
+    else {
+      const styles = new Set(res.rows.map((r) => r["style id"]).filter(Boolean));
+      notes.push('<div class="toast ok-toast">✓ ' + res.rows.length + " label(s)" +
+        (styles.size > 1 ? " across " + styles.size + " styles" : "") +
+        (res.rows.length > 1 ? " — the full size run; print one row or all." : "") + "</div>");
+      if (res.truncated) notes.push('<div class="toast warn">⚠ Showing the first ' + res.rows.length +
+        " matches only — narrow the search.</div>");
+    }
+    $("findToast").innerHTML = notes.join("");
+    $("findPrintAll").classList.toggle("hidden", !res.rows.length);
+    $("findZip").classList.toggle("hidden", !res.rows.length);
+    // The generate card holds the ZIP progress bar + download button, so it has
+    // to be visible for results here as well.
+    $("genCard").classList.toggle("hidden", !res.rows.length);
+    if (res.rows.length) {
+      $("genBtn").disabled = false; $("genBtn").style.display = "";
+      $("prog").style.display = "none"; $("progFill").style.width = "0%";
+      $("genMsg").textContent = ""; $("downloadBtn").style.display = "none";
+    }
+    refreshPrintButtons();
+  }
+
+  $("findBtn").addEventListener("click", runFind);
+  $("findInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); runFind(); } });
+  $("findTbl").addEventListener("input", (e) => {
+    if (!e.target.classList.contains("qty")) return;
+    const i = +e.target.dataset.i, n = parseInt(e.target.value, 10);
+    if (FIND_ROWS[i]) FIND_ROWS[i]._qty = isNaN(n) || n < 1 ? 1 : n;
+  });
+  $("findPrintAll").addEventListener("click", async () => {
+    if (!FIND_ROWS.length) return;
+    if (!printConnected()) { $("findToast").innerHTML =
+      '<div class="toast err">✕ Printer not connected — connect it under Direct printing.</div>'; return; }
+    $("findToast").innerHTML = '<div class="toast">Printing ' + FIND_ROWS.length + " label(s)…</div>";
+    try { await sendPrint(FIND_ROWS); $("findToast").innerHTML = '<div class="toast ok-toast">✓ Sent to the printer.</div>'; }
+    catch (e) { $("findToast").innerHTML = '<div class="toast err">✕ ' + esc(e.message) + "</div>"; }
+  });
+  $("findZip").addEventListener("click", () => {
+    if (!FIND_ROWS.length) return;
+    ROWS = FIND_ROWS;
+    window._lastFile = ($("findInput").value.trim() || "found") + ".csv";
+    $("genCard").classList.remove("hidden");
+    $("genCard").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("genBtn").click();
+  });
+
+  // ---------------------------------------------------------------------------
+  // STN scan station: scan an item barcode -> bundled item map gives its SKU ->
+  // match the uploaded STN row -> print that product's 60x83 label immediately.
+  // ---------------------------------------------------------------------------
+  let STN_INDEX = null, SCANS = [], SCAN_BUSY = false;
+
+  // OMS writes `3221-Beige_36`, the STN `3221-Beige-36` — same key, different
+  // separator, so compare on a normalised form.
+  const skuKey = (s) => (s || "").trim().toUpperCase().replace(/[\s_]+/g, "-");
+
+  function buildStnIndex(rows) {
+    const bySeller = new Map(), bySku = new Map(), byStem = new Map();
+    rows.forEach((r) => {
+      const ss = skuKey(r["seller sku code"]), sz = (r.size || "").trim();
+      if (ss) {
+        bySeller.set(ss, r);
+        if (sz) bySeller.set(ss + "-" + sz.toUpperCase(), r);   // VAN + size
+        // Stem = seller SKU without its trailing size, i.e. the VAN. Kept as a
+        // list so a bare VAN can report which sizes this dispatch holds.
+        const stem = ss.replace(/-[^-]+$/, "");
+        if (stem && stem !== ss) {
+          if (!byStem.has(stem)) byStem.set(stem, []);
+          byStem.get(stem).push(r);
+        }
+      }
+      const sk = skuKey(r["sku code"]);
+      if (sk) bySku.set(sk, r);
+    });
+    return { bySeller, bySku, byStem, rows };
+  }
+
+  // Three things can be scanned or typed:
+  //   ① item barcode (IB…)      → built-in item map gives the OMS SKU
+  //   ② SKU code                 (ANUKHeels97088318)
+  //   ③ seller SKU code          (3221-Beige-36, or the VAN 3221-Beige)
+  // Every one of them must resolve to a row in the LOADED STN — the STN is
+  // mandatory here, so a code outside this dispatch never prints.
+  function stnRowFor(key) {
+    if (!STN_INDEX) return null;
+    if (STN_INDEX.bySeller.has(key)) return STN_INDEX.bySeller.get(key);
+    if (STN_INDEX.bySku.has(key)) return STN_INDEX.bySku.get(key);
+    // OMS key carries the size, the STN may hold only the VAN — try the stem.
+    const stem = key.replace(/-[^-]+$/, "");
+    if (STN_INDEX.bySeller.has(stem)) return STN_INDEX.bySeller.get(stem);
+    // A bare VAN is only unambiguous when this dispatch has a single size of it.
+    const group = STN_INDEX.byStem.get(key);
+    if (group && group.length === 1) return group[0];
+    return null;
+  }
+
+  function resolveScan(code) {
+    const raw = (code || "").trim();
+    if (!STN_INDEX || !STN_INDEX.rows.length) {
+      return { ok: false, reason: "Upload the STN summary CSV first — this tab prints only from an STN." };
+    }
+
+    const item = window.LabelParse.findItem(raw);
+    if (item) {                                    // ① item barcode
+      const row = stnRowFor(skuKey(item.sku));
+      if (row) return { ok: true, via: "item", item, row: { ...row, _qty: 1 } };
+      return { ok: false, item, reason: "SKU " + item.sku + " is not in the loaded STN." };
+    }
+
+    // ② SKU code  /  ③ seller SKU code (or VAN)
+    const row = stnRowFor(skuKey(raw));
+    if (row) {
+      const via = skuKey(row["sku code"]) === skuKey(raw) ? "sku" : "seller";
+      return { ok: true, via, row: { ...row, _qty: 1 } };
+    }
+
+    if (/^IB\d+$/i.test(raw)) {
+      return { ok: false, reason: "Unknown item barcode — not in the built-in item map." };
+    }
+    // A VAN on its own covers the whole size run — say which sizes are here.
+    const group = STN_INDEX.byStem.get(skuKey(raw));
+    if (group && group.length > 1) {
+      const sizes = [...new Set(group.map((r) => r.size).filter(Boolean))]
+        .sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
+      return { ok: false, reason: "That's a VAN covering " + group.length +
+        " sizes in this STN (" + sizes.join(", ") + ") — add the size, e.g. " +
+        raw + "-" + (sizes[0] || "38") + "." };
+    }
+    // Known to the catalog but absent from this dispatch — say so precisely.
+    return { ok: false, reason: window.LabelParse.rowFromReference(raw)
+      ? "Found in the catalog but not in the loaded STN — it isn't part of this dispatch."
+      : "Not recognised as an item barcode, SKU code or seller SKU code." };
+  }
+
+  async function onScan(code) {
+    if (SCAN_BUSY) return;
+    const raw = (code || "").trim();
+    if (!raw) return;
+    if (!STN_INDEX || !STN_INDEX.rows.length) { showScanCard("no STN loaded"); return; }
+    SCAN_BUSY = true;
+    const res = resolveScan(raw);
+    let result;
+    if (!res.ok) {
+      result = { cls: "err", text: res.reason };
+    } else if (!printConnected()) {
+      result = { cls: "err", text: "Printer not connected — connect it under Direct printing." };
+    } else {
+      try { await sendPrint([res.row]); result = { cls: "ok", text: "Printed" }; }
+      catch (e) { result = { cls: "err", text: "Print failed: " + e.message }; }
+    }
+    SCANS.unshift({ code: raw, item: res.item, via: res.via, row: res.ok ? res.row : null, result });
+    renderScans();
+    SCAN_BUSY = false;
+  }
+
+  function renderScans() {
+    const tb = $("scanTbl").querySelector("tbody");
+    tb.innerHTML = "";
+    SCANS.slice(0, 60).forEach((s, i) => {
+      const tr = document.createElement("tr");
+      if (s.result.cls === "err") tr.classList.add("bad");
+      const r = s.row || {};
+      const src = s.via && s.via.indexOf("ref") > 0 ? " <span class=\"src\">(listing)</span>" : "";
+      tr.innerHTML = '<td class="rownum">' + (SCANS.length - i) + "</td>" +
+        "<td><b>" + esc(s.code) + "</b>" + src + "</td>" +
+        "<td>" + esc(s.item ? s.item.sku : (r["sku code"] || "")) + "</td>" +
+        "<td>" + esc(r["seller sku code"] || "") + "</td>" +
+        "<td>" + esc(r.size || "") + "</td>" +
+        "<td>" + esc(r.brand || "") + "</td>" +
+        '<td class="' + s.result.cls + '">' + esc(s.result.text) + "</td>";
+      tb.appendChild(tr);
+    });
+    const done = SCANS.filter((s) => s.result.cls === "ok").length;
+    $("scanCount").textContent = done + " printed";
+    const last = SCANS[0];
+    $("scanLast").innerHTML = last
+      ? '<div class="toast ' + (last.result.cls === "ok" ? "ok-toast" : "err") + '">' +
+        (last.result.cls === "ok" ? "✓ " : "✕ ") + esc(last.code) +
+        (last.row ? " · " + esc(last.row["seller sku code"]) + " · size " + esc(last.row.size) : "") +
+        " — " + esc(last.result.text) + "</div>"
+      : "";
+  }
+
+  function showScanCard(label) {
+    $("scanCard").classList.remove("hidden");
+    const im = window.LabelParse.itemsMeta();
+    const ready = !!(STN_INDEX && STN_INDEX.rows.length);
+    $("scanBadge").textContent = ready
+      ? label + " · " + STN_INDEX.rows.length + " STN rows"
+      : "waiting for an STN file";
+    // No STN, no scanning — the box stays disabled so nothing can print.
+    $("scanInput").disabled = !ready;
+    $("scanInput").placeholder = ready
+      ? "Scan item barcode · SKU code · seller SKU code"
+      : "Upload the STN summary CSV above to start scanning";
+    const notes = [];
+    if (!ready) notes.push('<div class="toast warn">⚠ <b>STN required.</b> Upload the STN summary CSV(s) above — ' +
+      "this tab prints only what's in that dispatch.</div>");
+    if (im) notes.push('<div class="toast ok-toast">📡 Item map ready — ' + im.items.toLocaleString() +
+      " item barcodes (built " + esc(im.built) + ").</div>");
+    else notes.push('<div class="toast warn">⚠ Item map not loaded — item barcodes can\'t be resolved.</div>');
+    if (ready && !printConnected()) notes.push('<div class="toast warn">⚠ Printer not connected — ' +
+      "connect it under <b>Direct printing</b> before scanning.</div>");
+    $("scanState").innerHTML = notes.join("");
+    if (ready) setTimeout(() => $("scanInput").focus(), 50);
+  }
+
+  $("scanClear").addEventListener("click", () => { SCANS = []; renderScans(); $("scanInput").focus(); });
+  // Scanners type the code then send Enter — treat Enter as "commit this scan".
+  $("scanInput").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const v = $("scanInput").value;
+    $("scanInput").value = "";
+    onScan(v);
+  });
+
+  // Same barcode arriving from more than one file — legitimate when two STNs
+  // ship the same SKU, but worth surfacing so nobody double-prints by accident.
+  function countDupes(rows) {
+    const seen = {}, dupes = {};
+    rows.forEach((r) => {
+      const k = (r["sku code"] || r["seller sku code"] || "").trim().toLowerCase();
+      if (!k) return;
+      if (seen[k]) dupes[k] = (dupes[k] || 1) + 1; else seen[k] = 1;
+    });
+    return Object.keys(dupes).length;
   }
 
   // ---- mapping step ----
@@ -347,16 +659,25 @@
   // ---- review ----
   const actionCell = (i) => '<td><a class="pv" data-i="' + i + '">Preview</a> · <a class="pr" data-i="' + i + '">Print</a></td>';
 
-  function renderReview(filename, format, problems, enriched) {
+  function renderReview(filename, format, problems, enriched, batch) {
     $("reviewCard").classList.remove("hidden"); $("genCard").classList.remove("hidden");
     const kind = MODE === "item" ? "Item-code" : MODE === "rack" ? "Rack" : format;
     $("fileBadge").textContent = filename + " · " + kind + " · " + ROWS.length + " labels";
 
     const notes = [];
+    if (batch && batch.files > 1) notes.push('<div class="toast ok-toast">📄 Combined ' +
+      batch.files + " files into one batch of " + ROWS.length + " labels." +
+      (batch.dupes ? " " + batch.dupes + " SKU(s) appear in more than one file — each prints separately." : "") +
+      "</div>");
+    if (batch && batch.unmapped && batch.unmapped.length) {
+      notes.push('<div class="toast warn">⚠ Not recognised, left out: ' + esc(batch.unmapped.join(", ")) +
+        ". Upload these on their own to map their columns.</div>");
+    }
     if (enriched) notes.push('<div class="toast ok-toast">🔎 ' + enriched +
       " row(s) completed / corrected from the stored listings (size kept from your file).</div>");
     if (problems && problems.length) {
-      const list = problems.slice(0, 8).map((p) => "row " + p.row + " (missing: " + p.missing.join(", ") + ")").join("; ");
+      const list = problems.slice(0, 8).map((p) => (p.file ? p.file + " " : "") +
+        "row " + p.row + " (missing: " + p.missing.join(", ") + ")").join("; ");
       notes.push('<div class="toast warn">⚠ ' + problems.length +
         " row(s) have blank required fields — they will still print, check them: " + esc(list) +
         (problems.length > 8 ? " …" : "") + "</div>");
@@ -387,7 +708,9 @@
         tb.appendChild(tr);
       });
     } else {
-      thead.innerHTML = "<tr><th>#</th><th></th><th>Copies</th><th>Seller SKU</th><th>SKU Code (barcode)</th><th>Size</th>" +
+      const multi = ROWS.some((r) => r._src) && new Set(ROWS.map((r) => r._src)).size > 1;
+      thead.innerHTML = "<tr><th>#</th><th></th><th>Copies</th>" + (multi ? "<th>File</th>" : "") +
+        "<th>Seller SKU</th><th>SKU Code (barcode)</th><th>Size</th>" +
         "<th>MRP</th><th>Brand</th><th>Article Type</th><th>Style Name</th><th>Style ID</th><th>Month &amp; Year</th></tr>";
       const req = ["seller sku code", "sku code", "size", "mrp"];
       ROWS.forEach((r, i) => {
@@ -396,6 +719,7 @@
         tr.innerHTML =
           '<td class="rownum">' + (i + 1) + "</td>" + actionCell(i) +
           '<td><input class="qty" type="number" min="1" value="' + (r._qty || 1) + '" data-i="' + i + '" style="width:52px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px"></td>' +
+          (multi ? '<td class="src">' + esc(r._src || "") + "</td>" : "") +
           "<td><b>" + esc(r["seller sku code"]) + "</b></td>" +
           "<td>" + esc(r["sku code"]) + "</td><td>" + esc(r.size) + "</td>" +
           "<td>₹" + esc(r.mrp) + "</td><td>" + esc(r.brand) + "</td>" +
@@ -461,7 +785,7 @@
 
   $("downloadBtn").addEventListener("click", () => {
     if (!ZIP_BLOB) return;
-    const base = (window._lastFile || "labels").replace(/\.[^.]+$/, "");
+    const base = (window._lastFile || "labels").replace(/\.[^.]+$/, "").replace(/[^\w.-]+/g, "_");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(ZIP_BLOB);
     a.download = base + "_labels.zip";

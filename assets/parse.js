@@ -294,21 +294,147 @@
     return JSON.parse(new TextDecoder().decode(plain));
   }
 
+  // ---- bundled item-barcode map (STN scan tab) ----
+  // Payload is run-length encoded (see tools/build_items.py): item barcodes are
+  // issued in contiguous runs, so ~292k entries ship as ~14k/27k runs.
+  function expandRuns(str) {
+    const out = [];
+    if (!str) return out;
+    for (const part of str.split(",")) {
+      const star = part.indexOf("*");
+      if (star < 0) { out.push(parseInt(part, 36)); continue; }
+      const v = parseInt(part.slice(0, star), 36);
+      let n = parseInt(part.slice(star + 1), 36);
+      while (n-- > 0) out.push(v);
+    }
+    return out;
+  }
+
+  function buildItemIndex(data) {
+    const deltas = expandRuns(data.d), skuIdx = expandRuns(data.s);
+    const map = new Map();
+    let n = data.n0;
+    map.set(n, skuIdx[0]);
+    for (let i = 0; i < deltas.length; i++) {
+      n += deltas[i];
+      map.set(n, skuIdx[i + 1]);
+    }
+    return {
+      meta: data.meta, prefix: data.prefix, skus: data.skus, names: data.names || {},
+      map,
+      find(barcode) {
+        const raw = (barcode || "").trim().toUpperCase();
+        const digits = raw.replace(/^[A-Z]+/, "");
+        if (!digits || !/^\d+$/.test(digits)) return null;
+        const i = this.map.get(parseInt(digits, 10));
+        if (i === undefined) return null;
+        return { itemCode: raw, sku: this.skus[i], name: this.names[String(i)] || "" };
+      },
+    };
+  }
+
+  async function decryptWith(enc, passphrase) {
+    const salt = b64bytes(enc.salt), iv = b64bytes(enc.iv), ct = b64bytes(enc.ct);
+    const keyMat = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: enc.iters, hash: "SHA-256" },
+      keyMat, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    let plain;
+    try { plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct); }
+    catch (e) { throw new Error("Wrong password."); }
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  // Same password as the listings reference, so one unlock covers both bundles.
+  async function unlockItems(passphrase) {
+    if (!window.ITEM_ENC) return null;
+    try {
+      window.LABEL_ITEMS = buildItemIndex(await decryptWith(window.ITEM_ENC, passphrase));
+      return window.LABEL_ITEMS.meta;
+    } catch (e) { return null; }
+  }
+  const itemsMeta = () => (window.LABEL_ITEMS ? window.LABEL_ITEMS.meta : null);
+  const findItem = (bc) => (window.LABEL_ITEMS ? window.LABEL_ITEMS.find(bc) : null);
+
+  // Build a complete label row straight from the listings reference. A SKU code
+  // (the Myntra barcode) is unique per brand, so this needs no disambiguation.
+  function rowFromReference(code) {
+    const m = master(); if (!m) return null;
+    const key = (code || "").trim().toLowerCase();
+    // OMS writes `aedbh-0106-golden_36`, the listing `…-36` — same key, so try both.
+    const alt = key.replace(/[\s_]+/g, "-");
+    const tryKeys = alt === key ? [key] : [key, alt];
+    let idx;
+    for (const k of tryKeys) {
+      if (idx === undefined) idx = m.bySku[k];
+      if (idx === undefined) idx = m.bySeller[k];
+      if (idx === undefined && m.bySkuId) idx = m.bySkuId[k];
+    }
+    if (idx === undefined) return null;
+    return rowFromRecord(m.records[idx]);
+  }
+
+  function rowFromRecord(rec) {
+    const row = blankRow();
+    for (const short in CANON_FROM_SHORT) row[CANON_FROM_SHORT[short]] = rec[short] || "";
+    row["month & year of manufacture"] = currentMonthYear();
+    row._filename = row["seller sku code"];
+    row._qty = 1;
+    row._van = rec.v || "";
+    return row;
+  }
+
+  // Manual finder: match a query against seller sku code, sku code, style id or
+  // VAN. Style id and VAN are shared across a style's sizes, so those queries
+  // naturally return the whole size run.
+  const SIZE_ORDER = (v) => { const n = parseFloat(v); return isNaN(n) ? 999 : n; };
+
+  function searchReference(query, limit) {
+    const m = master(); if (!m) return { rows: [], truncated: false };
+    const q = (query || "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+    if (q.length < 2) return { rows: [], truncated: false };
+    const cap = limit || 400;
+    const exact = [], partial = [];
+    for (const rec of m.records) {
+      const ss = (rec.ss || "").toLowerCase().replace(/[\s_]+/g, "-");
+      const sk = (rec.sk || "").toLowerCase();
+      const si = (rec.si || "").toLowerCase();
+      const van = (rec.v || "").toLowerCase().replace(/[\s_]+/g, "-");
+      if (ss === q || sk === q || si === q || van === q) exact.push(rec);
+      else if (ss.includes(q) || sk.includes(q) || si.includes(q) || van.includes(q)) partial.push(rec);
+      if (exact.length + partial.length > cap * 3) break;
+    }
+    // An exact style-id / VAN hit is the whole size run — show it on its own.
+    const hits = exact.length ? exact : partial;
+    const rows = hits.slice(0, cap).map(rowFromRecord);
+    rows.sort((a, b) => (a["style id"] || "").localeCompare(b["style id"] || "") ||
+                        SIZE_ORDER(a.size) - SIZE_ORDER(b.size));
+    return { rows, truncated: hits.length > cap, exact: exact.length > 0 };
+  }
+
   // unlock + remember the password on this browser
   async function unlockReference(passphrase) {
     const m = await decryptReference(passphrase);
     window.LABEL_MASTER = m;
     try { localStorage.setItem(PASS_KEY, passphrase); } catch (e) {}
+    unlockItems(passphrase);      // best-effort; scan tab works once it lands
     return m.meta;
   }
 
-  // silent unlock on load using a previously-entered password
+  // Silent unlock on load. The key normally ships in config.js so nobody has to
+  // type anything; a previously-entered password still works if it's blanked out.
   async function tryAutoUnlock() {
     if (!window.LABEL_ENC) return null;
-    let pass; try { pass = localStorage.getItem(PASS_KEY); } catch (e) {}
+    let pass = (C.REFERENCE_KEY || "").trim();
+    if (!pass) { try { pass = localStorage.getItem(PASS_KEY); } catch (e) {} }
     if (!pass) return null;
-    try { const m = await decryptReference(pass); window.LABEL_MASTER = m; return m.meta; }
-    catch (e) { try { localStorage.removeItem(PASS_KEY); } catch (_) {} return null; }  // password rotated
+    try {
+      const m = await decryptReference(pass);
+      window.LABEL_MASTER = m;
+      unlockItems(pass);
+      return m.meta;
+    } catch (e) { try { localStorage.removeItem(PASS_KEY); } catch (_) {} return null; }  // password rotated
   }
 
   const hasEncrypted = () => !!window.LABEL_ENC;
@@ -318,6 +444,7 @@
     parseUpload, applyMapping, cleanCell, masterMeta,
     buildMasterFromFiles, saveMaster, loadMasterFromStorage, clearMaster,
     unlockReference, tryAutoUnlock, hasEncrypted, forgetPassword,
-    parseRack,
+    parseRack, itemsMeta, findItem, rowFromReference, searchReference,
+    finalizeRows: finalize,
   };
 })();

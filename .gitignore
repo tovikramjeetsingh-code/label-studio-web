@@ -1,4 +1,7 @@
 .DS_Store
-# Raw listing catalogs — NEVER commit these (only the encrypted reference.enc.js is committed)
+# Raw catalogs / item exports — NEVER commit these
+# (only the encrypted reference.enc.js + items.enc.js are committed)
 private_source/
+private_source_items/
+_test/
 *.plain.json

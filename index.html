@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 
@@ -20,7 +20,32 @@
     <button class="modebtn active" data-mode="product">🏷️ Product label · 60 × 83 mm</button>
     <button class="modebtn" data-mode="item">🔳 Item-code label · 50 × 25 mm</button>
     <button class="modebtn" data-mode="rack">🗄️ Rack label · 25 × 15 mm</button>
+    <button class="modebtn" data-mode="stn">📡 Myntra STN · 60 × 83 mm</button>
+    <button class="modebtn" data-mode="find">🔍 Find a label · 60 × 83 mm</button>
   </div>
+
+  <!-- Manual finder -->
+  <section class="card hidden" id="findCard">
+    <h2>Find a label <span id="findBadge" class="pill ok"></span></h2>
+    <div class="sub">Type a <b>seller SKU code</b>, <b>SKU code</b>, <b>style ID</b> or <b>VAN</b>.
+      Style ID and VAN are shared across a style's sizes, so those bring back the whole size run —
+      print one size or all of them.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">
+      <input id="findInput" placeholder="e.g. 3221-Beige-36 · ANUKHeels97088318 · 30171247 · 3221-Beige"
+             autocomplete="off" spellcheck="false">
+      <button class="btn primary" id="findBtn">Search</button>
+      <button class="btn ghost hidden" id="findPrintAll">Print all results</button>
+      <button class="btn ghost hidden" id="findZip">Download ZIP</button>
+    </div>
+    <div id="findToast"></div>
+    <div class="tbl-wrap" style="margin-top:10px">
+      <table id="findTbl">
+        <thead><tr><th>#</th><th></th><th>Copies</th><th>Seller SKU</th><th>SKU Code</th><th>Size</th>
+          <th>MRP</th><th>Brand</th><th>Style Name</th><th>Style ID</th><th>VAN</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
 
   <!-- STEP 1 -->
   <section class="card">
@@ -39,6 +64,13 @@
     <div class="sub hidden" id="helpRack">Free-style <b>rack / location labels</b>. Upload a CSV or Excel where the
       <b>first column is the rack code</b> (encoded + printed big). An optional <b>second column</b> prints as a small caption.
       Pick <b>1D barcode</b> or <b>QR (2D)</b> below. Each row becomes a 25 × 15 mm sticker; <b>Print all</b> runs them 4-up on the same TSC roll.</div>
+    <div class="sub hidden" id="helpStn"><b>Upload the STN summary CSV(s) first — this tab won't print without one.</b>
+      Every label is built from that dispatch, so nothing outside it can be printed by mistake. Then scan or type any of:<br>
+      <b>① Item barcode</b> (<code>IB…</code>) — the built-in item map turns it into its SKU<br>
+      <b>② SKU code</b> (e.g. <code>ANUKHeels97088318</code>)<br>
+      <b>③ Seller SKU code</b> (e.g. <code>3221-Beige-36</code>) — a bare VAN covers every size, so include the size<br>
+      Each match prints its <b>60 × 83 mm</b> label immediately. Connect the printer under <b>Direct printing</b> first.</div>
+    <div class="sub hidden" id="helpFind">No file needed — search the built-in catalog in the <b>Find a label</b> panel below.</div>
     <div class="hidden" id="itemSizeRow" style="margin:2px 0 8px;font-size:13px;display:flex;gap:16px;align-items:center;">
       <b>Label size:</b>
       <label style="cursor:pointer"><input type="radio" name="itemSize" value="50x25" checked> 50 × 25 mm</label>
@@ -50,26 +82,20 @@
       <label style="cursor:pointer"><input type="radio" name="codeType" value="qr"> QR code (2D)</label>
     </div>
     <div id="drop">
-      <div class="big">Drop file here or click to browse</div>
-      <div class="small" id="dropHint">.csv · .xlsx</div>
+      <div class="big">Drop file(s) here or click to browse</div>
+      <div class="small" id="dropHint">.csv · .xlsx · multiple OK</div>
     </div>
-    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.xlsm">
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.xlsm" multiple>
     <div id="uploadToast"></div>
   </section>
 
   <!-- Stored reference (encrypted, unlocked with the team password) -->
   <section class="card" id="refCard">
-    <h2>Stored SKU reference <span class="pill priv-pill">🔒 encrypted · unlocked with the team password</span></h2>
-    <div class="sub">Enter the shared team password once on this device to activate the reference.
-      It then fills missing fields (brand, MRP, style…) automatically on every upload — you never
-      upload the listings file itself. The catalog ships encrypted; without the password it's unreadable.</div>
-    <div id="refLocked" class="hidden" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="password" id="refPass" placeholder="Team password"
-             style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;min-width:220px">
-      <button class="btn primary" id="refUnlock">Unlock reference</button>
-    </div>
+    <h2>Stored SKU reference <span class="pill priv-pill">📦 built in · no sign-in</span></h2>
+    <div class="sub">The listings catalog and the item-barcode map ship with the app and load by themselves —
+      nothing to enter, nothing to upload. They fill missing fields (brand, MRP, style…) on every upload
+      and power the Find and Scan tabs.</div>
     <div id="masterInfo" style="font-size:12.5px;color:var(--muted);margin-top:10px;"></div>
-    <a id="refClear" class="hidden" style="color:var(--err);font-size:12.5px;cursor:pointer;font-weight:600">Forget on this device</a>
   </section>
 
   <!-- Direct printing via QZ Tray -->
@@ -77,7 +103,10 @@
     <h2>Direct printing <span class="pill priv-pill" id="qzBadge">🖨 QZ Tray</span></h2>
     <div class="sub">Print stickers straight to your label printer — no PDF, no dialog. Needs the free
       <a href="https://qz.io/download/" target="_blank" rel="noopener">QZ Tray</a> app running on this machine
-      (one-time install; on first print click "Allow" and tick "Remember").</div>
+      (one-time install; on first print click "Allow" and tick "Remember").<br>
+      <b>Stop QZ asking every time?</b> <a href="override.crt" download>Download the trust certificate</a>,
+      put it in <code>C:\Program Files\QZ Tray\</code> (keep the name <code>override.crt</code>), then right-click
+      the QZ Tray icon → <b>Exit</b> and reopen it. After that QZ never prompts on this PC.</div>
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <button class="btn ghost" id="qzConnect">Connect printer</button>
       <select id="qzPrinter" class="hidden" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;min-width:240px"></select>
@@ -111,6 +140,27 @@
     <div id="mapGrid"></div>
     <div id="mapToast"></div>
     <div style="margin-top:14px"><button class="btn primary" id="mapBtn">Apply mapping →</button></div>
+  </section>
+
+  <!-- STN scan station -->
+  <section class="card hidden" id="scanCard">
+    <h2>2 · Scan &amp; print <span id="scanBadge" class="pill ok"></span></h2>
+    <div class="sub">Click the box, then scan or type. Item barcode, SKU code or seller SKU code — each
+      prints its 60 × 83 mm label straight away, and must be present in the loaded STN.</div>
+    <div id="scanState"></div>
+    <input id="scanInput" placeholder="Scan item barcode · SKU code · seller SKU code"
+           autocomplete="off" spellcheck="false">
+    <div id="scanLast"></div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="pill" id="scanCount">0 printed</span>
+      <button class="btn ghost" id="scanClear">Clear log</button>
+    </div>
+    <div class="tbl-wrap" style="margin-top:10px">
+      <table id="scanTbl">
+        <thead><tr><th>#</th><th>Item code</th><th>SKU</th><th>Seller SKU</th><th>Size</th><th>Brand</th><th>Result</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 
   <!-- STEP 2 : review -->
@@ -156,14 +206,15 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=15"></script>
-<script src="assets/reference.enc.js"></script>
-<script src="assets/parse.js?v=15"></script>
-<script src="assets/label.js?v=15"></script>
-<script src="assets/itemlabel.js?v=15"></script>
-<script src="assets/tsc.js?v=15"></script>
-<script src="assets/qz-cert.js?v=15"></script>
-<script src="assets/print.js?v=15"></script>
-<script src="assets/app.js?v=15"></script>
+<script src="assets/config.js?v=23"></script>
+<script src="assets/reference.enc.js?v=23"></script>
+<script src="assets/items.enc.js?v=23"></script>
+<script src="assets/parse.js?v=23"></script>
+<script src="assets/label.js?v=23"></script>
+<script src="assets/itemlabel.js?v=23"></script>
+<script src="assets/tsc.js?v=23"></script>
+<script src="assets/qz-cert.js?v=23"></script>
+<script src="assets/print.js?v=23"></script>
+<script src="assets/app.js?v=23"></script>
 </body>
 </html>

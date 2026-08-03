@@ -29,12 +29,14 @@ OUT = os.path.join(HERE, "..", "assets", "reference.enc.js")
 ITERS = 200_000
 
 COLS = {"brand": "b", "article type": "a", "style name": "sn", "style id": "si",
-        "size": "sz", "seller sku code": "ss", "sku code": "sk", "mrp": "m"}
+        "size": "sz", "seller sku code": "ss", "sku code": "sk", "mrp": "m",
+        "van": "v"}
 ALIASES = {
     "brand": ["brand"], "article type": ["article type"], "style name": ["style name"],
     "style id": ["style id"], "size": ["size"],
     "seller sku code": ["seller sku code", "seller sku"],
     "sku code": ["sku code", "sku_code"], "mrp": ["mrp"],
+    "van": ["van", "vendor article no", "vendor article number"],
 }
 
 
@@ -68,6 +70,7 @@ def build_master():
     if not files:
         sys.exit(f"No listing files in {os.path.abspath(SRC)} — move the Seller Listings Reports there first.")
     records, by_seller, by_sku, by_skuid, sources = [], {}, {}, {}, []
+    seen = set()
     for path in files:
         hdr, rows = read_rows(path)
         lut = {(c or "").strip().lower().rstrip(":"): c for c in hdr}
@@ -80,6 +83,13 @@ def build_master():
                 rec[short] = clean(r.get(col)) if col else ""
             if not rec["ss"] and not rec["sk"]:
                 continue
+            # The same SKU is often listed on both seller accounts with identical
+            # label fields — keep one record so the finder doesn't show (and
+            # print) every size twice.
+            dedupe_key = (rec["ss"].lower(), rec["sk"].lower())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
             idx = len(records); records.append(rec); n += 1
             if rec["ss"]:
                 by_seller[rec["ss"].lower()] = idx

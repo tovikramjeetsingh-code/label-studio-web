@@ -14,6 +14,13 @@ window.LABEL_CONFIG = {
 
   COUNTRY_OF_ORIGIN: "INDIA",
 
+  // Key that unlocks the bundled listings + item-barcode data. It lives here so
+  // the team never types a password — the app opens ready to use.
+  // NOTE: this is convenience, not security. Anyone who views the page source can
+  // read this key and decrypt the bundles, so treat the catalog as public.
+  // Set to "" to bring the password prompt back.
+  REFERENCE_KEY: "ku3y-US94-M2PD-TbD3",
+
   // Canonical label field -> accepted header aliases (matched case-insensitively,
   // trailing ':' ignored). Used for the original "Label Template" format.
   REQUIRED_COLUMNS: {
