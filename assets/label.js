@@ -193,10 +193,24 @@
     const sku = String(g("sku code"));
     const BC_TOP = barTop();
     const textFloor = BC_TOP;
-    // fit: measure at s=1, shrink if content would overrun the space available
-    const used = layoutContent(doc, row, 1, false) - SZ.startY;
+    // Fit by searching for the largest scale that genuinely fits, re-measuring
+    // at each candidate. Height is NOT linear in the scale: smaller text wraps
+    // into fewer lines, so a single measurement at s=1 over-estimates badly and
+    // over-shrinks (raising the base font then made the print SMALLER, not
+    // bigger). maxFit lets narrow stock grow into leftover space; the 60x83
+    // keeps maxFit 1 so its long-standing layout is untouched.
     const avail = textFloor - SZ.startY - 0.6;
-    const s = used > avail ? Math.max(0.6, avail / used) : 1;
+    const fits = (k) => layoutContent(doc, row, k, false) - SZ.startY <= avail;
+    const top = SZ.maxFit || 1;
+    let s = top;
+    if (!fits(top)) {
+      let lo = 0.45, hi = top;
+      for (let i = 0; i < 14; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) lo = mid; else hi = mid;
+      }
+      s = lo;
+    }
     layoutContent(doc, row, s, true);
 
     // Wide stock keeps the top-right SIZE box; the narrow one draws SIZE inline
