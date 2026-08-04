@@ -194,15 +194,38 @@
   }
 
   // 4-up 25x15: composite each row of labels, build ONE raw job (one QZ prompt).
+  // Quarter-turn a rendered label so a landscape page prints onto portrait
+  // stock. Used by 30x60, which is drawn 60x30 so its barcode gets the long axis.
+  function rotate90(cv) {
+    const out = document.createElement("canvas");
+    out.width = cv.height; out.height = cv.width;
+    const cx = out.getContext("2d");
+    cx.fillStyle = "#fff"; cx.fillRect(0, 0, out.width, out.height);
+    cx.translate(out.width / 2, out.height / 2);
+    cx.rotate(-Math.PI / 2);
+    cx.drawImage(cv, -cv.width / 2, -cv.height / 2);
+    return out;
+  }
+
+  // Render one label to a 203-dpi canvas sized for its slot on the roll.
+  async function slotCanvas(doc, sizeKey, slotWmm) {
+    const spec = window.LabelRender.specOf(sizeKey);
+    if (!spec.rotate) return docToCanvas(doc, slotWmm);
+    return rotate90(await docToCanvas(doc, spec.w));   // 60mm wide -> 30mm wide
+  }
+
   // A multi-up row carries one copy count for all N labels in it, so per-row
   // quantities are handled by repeating the rows before they are laid out.
-  async function printMultiUp(rows, buildDoc, roll, nCopies) {
+  async function printMultiUp(rows, buildDoc, roll, nCopies, sizeKey) {
     const T = window.TSCLabel, g = T.rolls[roll];
     const copiesOf = () => (nCopies == null ? copies() : nCopies);
     const parts = [T.bitmapHeader({ w: T.mediaWidth(roll), h: g.labelH }, g.rowGap)];
     for (let i = 0; i < rows.length; i += g.up) {
       const upc = [];
-      for (const r of rows.slice(i, i + g.up)) upc.push(await docToCanvas(buildDoc(r), g.labelW));
+      for (const r of rows.slice(i, i + g.up)) {
+        upc.push(sizeKey ? await slotCanvas(buildDoc(r), sizeKey, g.labelW)
+                         : await docToCanvas(buildDoc(r), g.labelW));
+      }
       parts.push(T.bitmapLabel(T.compositeRow(upc, roll), copiesOf()));
       $("genMsg").textContent = "Preparing " + Math.min(i + g.up, rows.length) + " / " + rows.length + "…";
       if (i % 40 === 0) await new Promise((r) => setTimeout(r, 0));
@@ -233,7 +256,7 @@
     if (window.TSCLabel.rolls[sz]) {
       const expanded = [];
       rows.forEach((r) => { for (let n = rowQty(r); n > 0; n--) expanded.push(r); });
-      await printMultiUp(expanded, (r) => window.LabelRender.buildLabelDoc(r, sz), sz, 1);
+      await printMultiUp(expanded, (r) => window.LabelRender.buildLabelDoc(r, sz), sz, 1, sz);
     } else {
       await printBitmaps(rows, (r) => window.LabelRender.buildLabelDoc(r, sz),
         window.LabelRender.sizeOf(sz), window.TSCLabel.prod.gap);

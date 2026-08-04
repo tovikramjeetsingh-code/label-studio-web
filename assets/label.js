@@ -11,18 +11,18 @@
   const SIZES = {
     "60x83": { w: 60, h: 83, m: 1.0, base: 1,    startY: 3.9, bcH: 11.5, bcPad: 5.7,
                sizeCap: 9, sizeVal: 18, headW: 40, skuPt: 9, tag: "60 × 83 mm" },
-    // Horizontal barcode, but it encodes the numeric SKU ID rather than the full
-    // SKU code: the full alphanumeric needs ~190 Code-128 modules, which across
-    // 27mm is under one dot at 203dpi and will not scan. The digits are the
-    // Myntra sku id (a strict suffix of the sku code) and pack 2-per-codeword in
-    // subset C, giving ~2.5-3 dots per module.
-    // bcInset keeps a quiet zone either side of the bars. Code-128 wants >=10x
-    // the module width (~3.4mm here) and these labels are butted on the roll, so
-    // the neighbour's ink would otherwise sit right against the start pattern.
-    "30x60": { w: 30, h: 60, m: 0.8, base: 0.78, startY: 2.4, bcH: 8.5, bcPad: 1.6,
-               sizeCap: 6, sizeVal: 16, headW: 17, skuPt: 5.8, tag: "30 × 60 mm",
-               sizeLead: true, numericCode: true, bcFull: true, mrpScale: 1.22,
-               sellerScale: 1.25, skuText: false },
+    // 30x60 stock, laid out LANDSCAPE and rotated a quarter turn at print time.
+    // The full SKU code is 16-18 chars = up to 200 Code-128 modules, which needs
+    // ~50mm to reach 2 dots per module at 203dpi. Across a 30mm label only 28mm
+    // is available (1.1 dots — will not scan), so the bars have to run along the
+    // 60mm axis. Rotating the whole label keeps the barcode horizontal relative
+    // to the text while giving it that 60mm. physW/physH are the label as it
+    // sits on the roll; w/h are the page we draw.
+    "30x60": { w: 60, h: 30, m: 0.6, base: 0.62, startY: 1.9, bcH: 8.0, bcPad: 1.0,
+               sizeCap: 7, sizeVal: 17, headW: 56, skuPt: 5.5, tag: "30 × 60 mm",
+               sizeLead: true, bcFull: true, keyScale: 3.0, leftFrac: 0.42,
+               skuText: false, maxFit: 3.0, rotate: true, wide: true,
+               physW: 30, physH: 60 },
   };
   let SZ = SIZES["60x83"];              // current size spec
 
@@ -126,9 +126,114 @@
 
   const barTop = () => SZ.h - SZ.m - SZ.bcPad - SZ.bcH;   // barcode top (fixed)
 
+  // Leftover height handed back to the wide layout after the fit search, spread
+  // between its blocks so the artwork reaches the barcode instead of leaving a
+  // band of white. Zero while measuring.
+  let EXTRA = 0;
+
   // Lay out the flowing left-column content at scale `s`. Returns the bottom y.
   // When draw is false it only measures (no ink) — used to compute the fit scale.
+  // Two-column layout for the wide (rotated) stock. Font size there is limited
+  // by LINE COUNT, not width: ~14 single-field lines in 21mm forces ~3.7pt no
+  // matter how wide the label is. Pairing short fields — and standing the two
+  // addresses side by side — cuts that to ~10 lines and buys back the size.
+  // Pack "Label: value" chunks across the full width, wrapping only when the
+  // line is genuinely full. Fixed two-column rows left big horizontal gaps
+  // whenever a value was short (Brand, Style ID, Country all are).
+  function flowFields(doc, items, x, y, width, pt, draw) {
+    const lh = pt * 1.15 * PT, gap = pt * 0.9 * PT;
+    let cx = x, cy = y, any = false;
+    for (const [label, value] of items) {
+      const v = String(value == null ? "" : value);
+      if (!v) continue;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(pt);
+      const lw = doc.getTextWidth(label + " ");
+      doc.setFont("helvetica", "normal");
+      const vw = doc.getTextWidth(v);
+      const need = lw + vw;
+      if (any && cx + need > x + width) { cx = x; cy += lh; }
+      if (draw) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(pt);
+        doc.text(label, cx, cy);
+        doc.setFont("helvetica", "normal");
+        doc.text(v, cx + lw, cy);
+      }
+      cx += need + gap;
+      any = true;
+    }
+    return cy + lh;
+  }
+
+  // Wide (rotated) stock: a large-type KEY block on the left — size, MRP and
+  // seller SKU, the three things read at arm's length — and everything else
+  // set small on the right. Both columns start at the same top; the taller of
+  // the two decides the block height.
+  function layoutWide(doc, row, s, draw) {
+    const b = SZ.base * s;
+    const left = SZ.m + 0.6, right = SZ.w - SZ.m - 0.6, fullW = right - left;
+    const gut = 2.2;
+    const keyW = fullW * (SZ.leftFrac || 0.4) - gut / 2;
+    const infoX = left + keyW + gut, infoW = right - infoX;
+    const g = (k) => (row[k] == null ? "" : row[k]);
+    const pt = 8 * b;                       // right-hand body size
+    const kp = pt * (SZ.keyScale || 2.1);   // left-hand key size
+    const capPt = kp * 0.42;                // small caption above/beside a key value
+
+    // ---- left: SIZE / MRP / SKU ----
+    let ky = SZ.startY + kp * PT;
+    const keyRow = (cap, drawValue) => {
+      if (draw) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(capPt);
+        doc.text(cap, left, ky);
+      }
+      let vx = left;
+      if (draw) vx += doc.getTextWidth(cap + " ");
+      if (draw) drawValue(vx, ky);
+      ky += kp * 1.15 * PT + EXTRA;
+    };
+
+    keyRow("SIZE", (vx, yy) => {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(kp);
+      doc.text(String(g("size")), vx, yy);
+    });
+    keyRow("MRP", (vx, yy) => {
+      const rp = rupeeImage(), rpH = kp * PT * 1.02, rpW = rpH * rp.ratio;
+      doc.addImage(rp.url, "PNG", vx, yy - rpH * 0.82, rpW, rpH);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(kp);
+      doc.text(String(g("mrp")), vx + rpW + 0.3, yy);
+    });
+    if (draw) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(pt * 0.72);
+      doc.text("(Incl. of all Taxes)", left, ky - kp * 1.15 * PT + pt * 0.9 * PT);
+    }
+    // seller SKU: caption on its own line, value big beneath and wrapped to width
+    if (draw) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(capPt);
+      doc.text("SKU", left, ky);
+    }
+    ky += capPt * 1.2 * PT;
+    ky = wrapped(doc, left, ky, keyW, kp * 0.62, "bold", g("seller sku code"), 0, draw);
+
+    // ---- right: everything else ----
+    let iy = SZ.startY + pt * PT;
+    iy = flowFields(doc, [
+      ["Brand:", g("brand")],
+      ["Article Type:", g("article type")],
+      ["Style ID:", g("style id")],
+      ["Month & Year:", g("month & year of manufacture")],
+      ["Country of Origin:", C.COUNTRY_OF_ORIGIN],
+    ], infoX, iy, infoW, pt, draw) + EXTRA;
+
+    iy = wrapped(doc, infoX, iy, infoW, pt * 0.95, "bold", "Designed & Marketed By:", 0, draw) + 0.3 * b;
+    iy = wrapped(doc, infoX, iy, infoW, pt * 0.85, "normal", C.DESIGNED_BY, 0, draw) + 0.7 * b + EXTRA;
+    iy = wrapped(doc, infoX, iy, infoW, pt * 0.95, "bold", "Manufactured & Packed By:", 0, draw) + 0.3 * b;
+    iy = wrapped(doc, infoX, iy, infoW, pt * 0.85, "normal", C.MANUFACTURED_BY, 0, draw);
+
+    return Math.max(ky, iy);
+  }
+
   function layoutContent(doc, row, s, draw) {
+    if (SZ.wide) return layoutWide(doc, row, s, draw);
     const b = SZ.base * s;                       // size scale x fit scale
     const left = SZ.m + 0.6;
     const rightEdge = SZ.w - SZ.m - 0.6;
@@ -211,7 +316,13 @@
       }
       s = lo;
     }
+    // spread any remaining height across the wide layout's three block gaps
+    if (SZ.wide) {
+      const used = layoutContent(doc, row, s, false) - SZ.startY;
+      EXTRA = Math.max(0, (avail - used) / 3);
+    }
     layoutContent(doc, row, s, true);
+    EXTRA = 0;
 
     // Wide stock keeps the top-right SIZE box; the narrow one draws SIZE inline
     // at the head of the flow (see layoutContent).
@@ -241,12 +352,19 @@
   }
 
   const sizeKeys = () => Object.keys(SIZES);
-  const sizeOf = (key) => { const s = SIZES[key] || SIZES["60x83"]; return { w: s.w, h: s.h, tag: s.tag }; };
+  const specOf = (key) => SIZES[key] || SIZES["60x83"];
+  // Physical label as it sits on the roll (rotated stock reports the roll size).
+  const sizeOf = (key) => {
+    const s = specOf(key);
+    return { w: s.physW || s.w, h: s.physH || s.h, tag: s.tag, rotate: !!s.rotate };
+  };
   function useSize(key) { SZ = SIZES[key] || SIZES["60x83"]; return SZ; }
 
   function newDoc() {
     const { jsPDF } = window.jspdf;
-    return new jsPDF({ unit: "mm", format: [SZ.w, SZ.h], compress: true });
+    // jsPDF swaps a wider-than-tall format back to portrait unless told otherwise.
+    const orientation = SZ.w > SZ.h ? "landscape" : "portrait";
+    return new jsPDF({ unit: "mm", format: [SZ.w, SZ.h], orientation, compress: true });
   }
 
   // One label -> one-page doc.
@@ -262,11 +380,11 @@
     if (sizeKey) useSize(sizeKey);
     const doc = newDoc();
     rows.forEach((row, i) => {
-      if (i > 0) doc.addPage([SZ.w, SZ.h], "portrait");
+      if (i > 0) doc.addPage([SZ.w, SZ.h], SZ.w > SZ.h ? "landscape" : "portrait");
       drawLabel(doc, row);
     });
     return doc;
   }
 
-  window.LabelRender = { buildLabelDoc, buildLabelDocMulti, barcodeDataURL, useSize, sizeOf, sizeKeys };
+  window.LabelRender = { buildLabelDoc, buildLabelDocMulti, barcodeDataURL, useSize, sizeOf, specOf, sizeKeys };
 })();
