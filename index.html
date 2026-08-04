@@ -5,23 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 
 <header>
   <h1>🏷️ Label Studio</h1>
-  <span>Myntra product stickers · 60 × 83 mm · one PDF per SKU-size</span>
+  <span>Myntra product stickers · 60 × 83 &amp; 30 × 60 mm · one PDF per SKU-size</span>
   <span class="priv">🔒 Runs in your browser — files never leave this device</span>
 </header>
 
 <main>
   <div class="modebar">
-    <button class="modebtn active" data-mode="product">🏷️ Product label · 60 × 83 mm</button>
+    <button class="modebtn active" data-mode="product">🏷️ Product label</button>
     <button class="modebtn" data-mode="item">🔳 Item-code label · 50 × 25 mm</button>
     <button class="modebtn" data-mode="rack">🗄️ Rack label · 25 × 15 mm</button>
-    <button class="modebtn" data-mode="stn">📡 Myntra STN · 60 × 83 mm</button>
-    <button class="modebtn" data-mode="find">🔍 Find a label · 60 × 83 mm</button>
+    <button class="modebtn" data-mode="stn">📡 Myntra STN</button>
+    <button class="modebtn" data-mode="find">🔍 Find a label</button>
   </div>
 
   <!-- Manual finder -->
@@ -69,8 +69,13 @@
       <b>① Item barcode</b> (<code>IB…</code>) — the built-in item map turns it into its SKU<br>
       <b>② SKU code</b> (e.g. <code>ANUKHeels97088318</code>)<br>
       <b>③ Seller SKU code</b> (e.g. <code>3221-Beige-36</code>) — a bare VAN covers every size, so include the size<br>
-      Each match prints its <b>60 × 83 mm</b> label immediately. Connect the printer under <b>Direct printing</b> first.</div>
+      Each match prints its label immediately in the size selected above. Connect the printer under <b>Direct printing</b> first.</div>
     <div class="sub hidden" id="helpFind">No file needed — search the built-in catalog in the <b>Find a label</b> panel below.</div>
+    <div id="prodSizeRow" style="margin:2px 0 12px;font-size:13px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+      <b>Label size:</b>
+      <label style="cursor:pointer"><input type="radio" name="prodSize" value="60x83" checked> 60 × 83 mm</label>
+      <label style="cursor:pointer"><input type="radio" name="prodSize" value="30x60"> 30 × 60 mm <span style="color:var(--muted)">(3-up roll, barcode down the side)</span></label>
+    </div>
     <div class="hidden" id="itemSizeRow" style="margin:2px 0 8px;font-size:13px;display:flex;gap:16px;align-items:center;">
       <b>Label size:</b>
       <label style="cursor:pointer"><input type="radio" name="itemSize" value="50x25" checked> 50 × 25 mm</label>
@@ -206,15 +211,15 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=23"></script>
-<script src="assets/reference.enc.js?v=23"></script>
-<script src="assets/items.enc.js?v=23"></script>
-<script src="assets/parse.js?v=23"></script>
-<script src="assets/label.js?v=23"></script>
-<script src="assets/itemlabel.js?v=23"></script>
-<script src="assets/tsc.js?v=23"></script>
-<script src="assets/qz-cert.js?v=23"></script>
-<script src="assets/print.js?v=23"></script>
-<script src="assets/app.js?v=23"></script>
+<script src="assets/config.js?v=25"></script>
+<script src="assets/reference.enc.js?v=25"></script>
+<script src="assets/items.enc.js?v=25"></script>
+<script src="assets/parse.js?v=25"></script>
+<script src="assets/label.js?v=25"></script>
+<script src="assets/itemlabel.js?v=25"></script>
+<script src="assets/tsc.js?v=25"></script>
+<script src="assets/qz-cert.js?v=25"></script>
+<script src="assets/print.js?v=25"></script>
+<script src="assets/app.js?v=25"></script>
 </body>
 </html>

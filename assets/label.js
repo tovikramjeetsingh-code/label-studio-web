@@ -4,7 +4,20 @@
 (function () {
   const C = window.LABEL_CONFIG;
   const PT = 0.352777778;               // 1pt in mm
-  const PAGE_W = 60, PAGE_H = 83, M = 1; // page + margin (mm)
+
+  // Two product-label sizes. `base` scales every font so the same field set fits
+  // the narrower stock; `headW` is the wrap width of the label:value column.
+  // bcPad = gap between the barcode and the SKU text printed under it.
+  const SIZES = {
+    "60x83": { w: 60, h: 83, m: 1.0, base: 1,    startY: 3.9, bcH: 11.5, bcPad: 5.7,
+               sizeCap: 9, sizeVal: 18, headW: 40, skuPt: 9, tag: "60 × 83 mm" },
+    // Barcode runs vertically down the right edge (see barcodeDataURLRot).
+    // bcW = width of that strip; the text column gets what's left.
+    "30x60": { w: 30, h: 60, m: 0.8, base: 0.58, startY: 2.4, bcH: 8.0,  bcPad: 3.6,
+               sizeCap: 5, sizeVal: 11, headW: 18.2, skuPt: 4.4, tag: "30 × 60 mm",
+               vert: true, bcW: 8.2 },
+  };
+  let SZ = SIZES["60x83"];              // current size spec
 
   let _rupeeCache = null;                // dataURL, cached across labels
 
@@ -30,13 +43,33 @@
     return _rupeeCache;
   }
 
-  function barcodeDataURL(value) {
+  function barcodeCanvas(value, withText) {
     const cv = document.createElement("canvas");
     JsBarcode(cv, String(value), {
-      format: "CODE128", displayValue: false,
+      format: "CODE128", displayValue: !!withText,
+      fontSize: 15, textMargin: 1, font: "Helvetica", fontOptions: "bold",
       width: 2, height: 90, margin: 4, background: "#ffffff", lineColor: "#000000",
     });
-    return cv.toDataURL("image/png");
+    return cv;
+  }
+
+  function barcodeDataURL(value) { return barcodeCanvas(value).toDataURL("image/png"); }
+
+  // Quarter-turn copy, so the bars can run along the label's LONG axis. On
+  // 30mm-wide stock a 17-char SKU needs ~189 modules; across 27mm that is under
+  // one dot at 203dpi and will not scan, but down 60mm it clears 2 dots.
+  // The human-readable code is baked in BEFORE rotating, so it can never drift
+  // out of the strip the way a separately-rotated text run can.
+  function barcodeDataURLRot(value) {
+    const src = barcodeCanvas(value, true);
+    const out = document.createElement("canvas");
+    out.width = src.height; out.height = src.width;
+    const ctx = out.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, out.width, out.height);
+    ctx.translate(out.width / 2, out.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(src, -src.width / 2, -src.height / 2);
+    return out.toDataURL("image/png");
   }
 
   // "Bold label: normal value" on one baseline, value wraps within maxW.
@@ -47,9 +80,11 @@
     const labW = doc.getTextWidth(label + " ");
     if (draw !== false) doc.text(label, x, y);
     doc.setFont("helvetica", "normal");
-    const firstW = maxW - labW;
+    // On narrow stock the bold label can eat the whole column; when too little
+    // room is left the value starts on its own line instead of running off.
+    const inline = labW < maxW * 0.72;
+    const firstW = inline ? maxW - labW : maxW;
     const val = String(value == null ? "" : value);
-    // wrap: first line shortened by the label width, rest full width
     const words = val.split(/\s+/).filter(Boolean);
     const lines = []; let cur = "", curMax = firstW;
     words.forEach((w) => {
@@ -60,8 +95,23 @@
     });
     if (cur) lines.push(cur);
     if (!lines.length) lines.push("");
-    if (draw !== false) lines.forEach((ln, i) => doc.text(ln, i === 0 ? x + labW : x, y + i * lh));
-    return y + lines.length * lh;
+    // A single unbreakable token (a seller SKU) can still be wider than the
+    // column; split it on characters so it can never run past the text area.
+    for (let i = 0; i < lines.length; i++) {
+      const lim = (inline && i === 0) ? firstW : maxW;
+      if (doc.getTextWidth(lines[i]) <= lim) continue;
+      const parts = doc.splitTextToSize(lines[i], lim);
+      lines.splice(i, 1, ...parts);
+      i += parts.length - 1;
+    }
+    if (draw !== false) {
+      lines.forEach((ln, i) => {
+        const lx = (inline && i === 0) ? x + labW : x;
+        const ly = y + (inline ? i : i + 1) * lh;
+        doc.text(ln, lx, ly);
+      });
+    }
+    return y + (inline ? lines.length : lines.length + 1) * lh;
   }
 
   // plain wrapped text; returns y after
@@ -75,96 +125,132 @@
     return y + lines.length * lh;
   }
 
-  const START_Y = 3.9;
-  const BC_H = 11.5;
-  const BC_TOP = PAGE_H - M - 1.5 - 4.2 - BC_H;   // barcode top (fixed, ~64.8mm)
+  const barTop = () => SZ.h - SZ.m - SZ.bcPad - SZ.bcH;   // barcode top (fixed)
 
   // Lay out the flowing left-column content at scale `s`. Returns the bottom y.
   // When draw is false it only measures (no ink) — used to compute the fit scale.
   function layoutContent(doc, row, s, draw) {
-    const left = M + 0.6, rightEdge = PAGE_W - M - 0.6, fullW = rightEdge - left, headW = 40;
+    const b = SZ.base * s;                       // size scale x fit scale
+    const left = SZ.m + 0.6;
+    // A vertical barcode eats a strip off the right, so the text column narrows.
+    const rightEdge = SZ.w - SZ.m - 0.6 - (SZ.vert ? SZ.bcW + 0.8 : 0);
+    const fullW = rightEdge - left;
+    const headW = Math.min(SZ.headW, fullW);
     const g = (k) => (row[k] == null ? "" : row[k]);
-    let y = START_Y;
-    y = labelValue(doc, left, y, headW, 8 * s, "Brand:", g("brand"), draw);
-    y = labelValue(doc, left, y, headW, 8 * s, "Article Type:", g("article type"), draw);
-    y = labelValue(doc, left, y, headW, 8 * s, "Style Name:", g("style name"), draw);
-    y = labelValue(doc, left, y, headW, 8 * s, "Style ID:", g("style id"), draw);
-    y = labelValue(doc, left, y, headW, 8 * s, "Month & Year:", g("month & year of manufacture"), draw);
-    y = labelValue(doc, left, y, headW, 8 * s, "Country of Origin:", C.COUNTRY_OF_ORIGIN, draw);
+    let y = SZ.startY;
 
-    let cy = Math.max(y, 13) + 1.2 * s;
-    cy = labelValue(doc, left, cy, fullW, 8 * s, "Seller SKU:", g("seller sku code"), draw) + 1.0 * s;
+    // Narrow stock has no room for a top-right SIZE box beside the text, so the
+    // size leads the flow instead — nothing can collide with it.
+    if (SZ.vert) {
+      const cap = SZ.sizeCap * s, val = SZ.sizeVal * s;
+      const baseline = y + val * PT;
+      if (draw) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(cap);
+        doc.text("SIZE", left, baseline);
+        const capW = doc.getTextWidth("SIZE ");
+        doc.setFontSize(val);
+        doc.text(String(g("size")), left + capW, baseline);
+      }
+      y = baseline + 8 * b * 1.15 * PT;      // clear the big digit's descender
+    }
+
+    y = labelValue(doc, left, y, headW, 8 * b, "Brand:", g("brand"), draw);
+    y = labelValue(doc, left, y, headW, 8 * b, "Article Type:", g("article type"), draw);
+    y = labelValue(doc, left, y, headW, 8 * b, "Style Name:", g("style name"), draw);
+    y = labelValue(doc, left, y, headW, 8 * b, "Style ID:", g("style id"), draw);
+    y = labelValue(doc, left, y, headW, 8 * b, "Month & Year:", g("month & year of manufacture"), draw);
+    y = labelValue(doc, left, y, headW, 8 * b, "Country of Origin:", C.COUNTRY_OF_ORIGIN, draw);
+
+    let cy = Math.max(y, 13 * SZ.base) + 1.2 * b;
+    cy = labelValue(doc, left, cy, fullW, 8 * b, "Seller SKU:", g("seller sku code"), draw) + 1.0 * b;
 
     // MRP
-    const mrpBaseline = cy + 3.2 * s;
+    const mrpBaseline = cy + 3.2 * b;
     if (draw) {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9 * s);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9 * b);
       doc.text("MRP:", left, mrpBaseline);
       let mx = left + doc.getTextWidth("MRP: ");
-      const valSize = 13 * s, rp = rupeeImage(), rpH = valSize * PT * 1.02, rpW = rpH * rp.ratio;
+      const valSize = 13 * b, rp = rupeeImage(), rpH = valSize * PT * 1.02, rpW = rpH * rp.ratio;
       doc.addImage(rp.url, "PNG", mx, mrpBaseline - rpH * 0.82, rpW, rpH);
       mx += rpW + 0.3;
       doc.setFontSize(valSize); doc.text(String(g("mrp")), mx, mrpBaseline);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(6 * s);
-      doc.text("(Incl. of all Taxes)", left, mrpBaseline + 2.4 * s);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6 * b);
+      doc.text("(Incl. of all Taxes)", left, mrpBaseline + 2.4 * b);
     }
-    cy = mrpBaseline + 6.0 * s;
+    cy = mrpBaseline + 6.0 * b;
 
-    // addresses
-    if (draw) { doc.setFont("helvetica", "bold"); doc.setFontSize(8 * s); doc.text("Designed & Marketed By:", left, cy); }
-    cy += 8 * s * 1.15 * PT + 0.6 * s;
-    cy = wrapped(doc, left, cy, fullW, 5.5 * s, "normal", C.DESIGNED_BY, 0, draw) + 1.4 * s;
-    if (draw) { doc.setFont("helvetica", "bold"); doc.setFontSize(8 * s); doc.text("Manufactured & Packed By:", left, cy); }
-    cy += 8 * s * 1.15 * PT + 0.6 * s;
-    cy = wrapped(doc, left, cy, fullW, 5.5 * s, "normal", C.MANUFACTURED_BY, 0, draw);
+    // addresses — headings wrap too, or they run into the barcode strip
+    cy = wrapped(doc, left, cy, fullW, 8 * b, "bold", "Designed & Marketed By:", 0, draw) + 0.6 * b;
+    cy = wrapped(doc, left, cy, fullW, 5.5 * b, "normal", C.DESIGNED_BY, 0, draw) + 1.4 * b;
+    cy = wrapped(doc, left, cy, fullW, 8 * b, "bold", "Manufactured & Packed By:", 0, draw) + 0.6 * b;
+    cy = wrapped(doc, left, cy, fullW, 5.5 * b, "normal", C.MANUFACTURED_BY, 0, draw);
     return cy;
   }
 
   function drawLabel(doc, row) {
     const g = (k) => (row[k] == null ? "" : row[k]);
-    // fit: measure at s=1, shrink if content would collide with the barcode
-    const used = layoutContent(doc, row, 1, false) - START_Y;
-    const avail = BC_TOP - START_Y - 0.6;
+    const sku = String(g("sku code"));
+    // Vertical-barcode stock has the full page height for text; on the wide
+    // stock the text must stop above the horizontal barcode.
+    const BC_TOP = barTop();
+    const textFloor = SZ.vert ? SZ.h - SZ.m : BC_TOP;
+    // fit: measure at s=1, shrink if content would overrun the space available
+    const used = layoutContent(doc, row, 1, false) - SZ.startY;
+    const avail = textFloor - SZ.startY - 0.6;
     const s = used > avail ? Math.max(0.6, avail / used) : 1;
     layoutContent(doc, row, s, true);
 
-    // SIZE box (top-right, unscaled)
-    const rightEdge = PAGE_W - M - 0.6;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9); doc.text("SIZE", rightEdge, 4.4, { align: "right" });
-    doc.setFontSize(18); doc.text(String(g("size")), rightEdge, 11.6, { align: "right" });
+    // Wide stock keeps the top-right SIZE box; the narrow one draws SIZE inline
+    // at the head of the flow (see layoutContent).
+    if (!SZ.vert) {
+      const rightEdge = SZ.w - SZ.m - 0.6;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(SZ.sizeCap); doc.text("SIZE", rightEdge, SZ.startY + 0.5, { align: "right" });
+      doc.setFontSize(SZ.sizeVal);
+      doc.text(String(g("size")), rightEdge, SZ.startY + SZ.sizeVal * PT * 1.15 + 1.0, { align: "right" });
+    }
 
-    // barcode (fixed at bottom)
-    const sku = String(g("sku code"));
-    if (sku) {
-      const left = M + 0.6, fullW = PAGE_W - M - 0.6 - left;
-      try { doc.addImage(barcodeDataURL(sku), "PNG", left, BC_TOP, fullW, BC_H); } catch (e) {}
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-      doc.text(sku, PAGE_W / 2, PAGE_H - M - 1.8, { align: "center" });
+    if (!sku) return;
+    if (SZ.vert) {
+      // Bars run down the right edge; the SKU text is rotated to sit beside them.
+      const bx = SZ.w - SZ.m - SZ.bcW, by = SZ.m + 1.0;
+      const bh = SZ.h - by - SZ.m - 1.0;
+      try { doc.addImage(barcodeDataURLRot(sku), "PNG", bx, by, SZ.bcW, bh); } catch (e) {}
+    } else {
+      const left = SZ.m + 0.6, fullW = SZ.w - SZ.m - 0.6 - left;
+      try { doc.addImage(barcodeDataURL(sku), "PNG", left, BC_TOP, fullW, SZ.bcH); } catch (e) {}
+      doc.setFont("helvetica", "bold"); doc.setFontSize(SZ.skuPt);
+      doc.text(sku, SZ.w / 2, SZ.h - SZ.m - SZ.bcPad * 0.32, { align: "center" });
     }
   }
 
+  const sizeKeys = () => Object.keys(SIZES);
+  const sizeOf = (key) => { const s = SIZES[key] || SIZES["60x83"]; return { w: s.w, h: s.h, tag: s.tag }; };
+  function useSize(key) { SZ = SIZES[key] || SIZES["60x83"]; return SZ; }
+
   function newDoc() {
     const { jsPDF } = window.jspdf;
-    return new jsPDF({ unit: "mm", format: [PAGE_W, PAGE_H], compress: true });
+    return new jsPDF({ unit: "mm", format: [SZ.w, SZ.h], compress: true });
   }
 
   // One label -> one-page doc.
-  function buildLabelDoc(row) {
+  function buildLabelDoc(row, sizeKey) {
+    if (sizeKey) useSize(sizeKey);
     const doc = newDoc();
     drawLabel(doc, row);
     return doc;
   }
 
-  // Many labels -> one multi-page doc (one 60x83mm page per row) for a single print job.
-  function buildLabelDocMulti(rows) {
+  // Many labels -> one multi-page doc (one page per row) for a single print job.
+  function buildLabelDocMulti(rows, sizeKey) {
+    if (sizeKey) useSize(sizeKey);
     const doc = newDoc();
     rows.forEach((row, i) => {
-      if (i > 0) doc.addPage([PAGE_W, PAGE_H], "portrait");
+      if (i > 0) doc.addPage([SZ.w, SZ.h], "portrait");
       drawLabel(doc, row);
     });
     return doc;
   }
 
-  window.LabelRender = { buildLabelDoc, buildLabelDocMulti, barcodeDataURL };
+  window.LabelRender = { buildLabelDoc, buildLabelDocMulti, barcodeDataURL, useSize, sizeOf, sizeKeys };
 })();

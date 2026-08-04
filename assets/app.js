@@ -10,23 +10,26 @@
 
   const ITEMCODE_KEY = "labelStudioItemCode_v1";
   const ITEMSIZE_KEY = "labelStudioItemSize_v1";
+  const PRODSIZE_KEY = "labelStudioProdSize_v1";
   const radioVal = (name, fallback) => {
     const el = document.querySelector('input[name="' + name + '"]:checked');
     return el ? el.value : fallback;
   };
   function itemCodeType() { return radioVal("codeType", localStorage.getItem(ITEMCODE_KEY) || "barcode"); }
   function itemSizeKey() { return radioVal("itemSize", localStorage.getItem(ITEMSIZE_KEY) || "50x25"); }
+  // Product-label stock — shared by the Product, Myntra STN and Find tabs.
+  function prodSizeKey() { return radioVal("prodSize", localStorage.getItem(PRODSIZE_KEY) || "60x83"); }
 
   const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r, itemCodeType(), itemSizeKey())
                         : MODE === "rack" ? window.ItemLabel.buildRackDoc(r, itemCodeType())
-                        : window.LabelRender.buildLabelDoc(r);
+                        : window.LabelRender.buildLabelDoc(r, prodSizeKey());
   const labelSize = () => MODE === "item" ? window.ItemLabel.sizeOf(itemSizeKey())
                         : MODE === "rack" ? { w: 25, h: 15 }
-                        : { w: 60, h: 83 };
+                        : window.LabelRender.sizeOf(prodSizeKey());
 
   // restore + persist the item-code type and size choices
   (function () {
-    [["codeType", ITEMCODE_KEY], ["itemSize", ITEMSIZE_KEY]].forEach(([name, key]) => {
+    [["codeType", ITEMCODE_KEY], ["itemSize", ITEMSIZE_KEY], ["prodSize", PRODSIZE_KEY]].forEach(([name, key]) => {
       const saved = localStorage.getItem(key);
       if (saved) { const el = document.querySelector('input[name="' + name + '"][value="' + saved + '"]'); if (el) el.checked = true; }
       document.querySelectorAll('input[name="' + name + '"]').forEach((r) =>
@@ -47,6 +50,8 @@
     $("drop").classList.toggle("hidden", mode === "find");     // finder needs no upload
     $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
+    // Product stock applies wherever a product label is produced.
+    $("prodSizeRow").classList.toggle("hidden", mode === "item" || mode === "rack");
     $("dropHint").textContent = (mode === "item" ? ".pdf" : ".csv · .xlsx") + " · multiple OK";
     $("fileInput").accept = mode === "item" ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
     $("fileInput").multiple = true;
@@ -189,13 +194,16 @@
   }
 
   // 4-up 25x15: composite each row of labels, build ONE raw job (one QZ prompt).
-  async function print4up(rows, buildDoc) {
-    const T = window.TSCLabel, roll = "25x15", g = T.rolls[roll];
+  // A multi-up row carries one copy count for all N labels in it, so per-row
+  // quantities are handled by repeating the rows before they are laid out.
+  async function printMultiUp(rows, buildDoc, roll, nCopies) {
+    const T = window.TSCLabel, g = T.rolls[roll];
+    const copiesOf = () => (nCopies == null ? copies() : nCopies);
     const parts = [T.bitmapHeader({ w: T.mediaWidth(roll), h: g.labelH }, g.rowGap)];
     for (let i = 0; i < rows.length; i += g.up) {
       const upc = [];
       for (const r of rows.slice(i, i + g.up)) upc.push(await docToCanvas(buildDoc(r), g.labelW));
-      parts.push(T.bitmapLabel(T.compositeRow(upc, roll), copies()));
+      parts.push(T.bitmapLabel(T.compositeRow(upc, roll), copiesOf()));
       $("genMsg").textContent = "Preparing " + Math.min(i + g.up, rows.length) + " / " + rows.length + "…";
       if (i % 40 === 0) await new Promise((r) => setTimeout(r, 0));
     }
@@ -208,7 +216,7 @@
     applyOffset();   // use the latest alignment nudge
     if (MODE === "rack") {
       const ct = itemCodeType();
-      await print4up(rows, (r) => window.ItemLabel.buildRackDoc(r, ct));
+      await printMultiUp(rows, (r) => window.ItemLabel.buildRackDoc(r, ct), "25x15");
       return;
     }
     if (MODE === "item") {
@@ -216,12 +224,20 @@
         await LP.printRaw(window.TSCLabel.buildItemTSPL(rows, itemCodeType(), copies()), selectedPrinter());  // native 2-up
       } else {
         const ct = itemCodeType();
-        await print4up(rows, (r) => window.ItemLabel.buildItemDoc(r, ct, "25x15"));
+        await printMultiUp(rows, (r) => window.ItemLabel.buildItemDoc(r, ct, "25x15"), "25x15");
       }
       return;
     }
-    // product 60x83 — single-up bitmap TSPL
-    await printBitmaps(rows, (r) => window.LabelRender.buildLabelDoc(r), { w: 60, h: 83 }, window.TSCLabel.prod.gap);
+    // product label — 60x83 runs single-up, 30x60 runs 3-up on its own roll
+    const sz = prodSizeKey();
+    if (window.TSCLabel.rolls[sz]) {
+      const expanded = [];
+      rows.forEach((r) => { for (let n = rowQty(r); n > 0; n--) expanded.push(r); });
+      await printMultiUp(expanded, (r) => window.LabelRender.buildLabelDoc(r, sz), sz, 1);
+    } else {
+      await printBitmaps(rows, (r) => window.LabelRender.buildLabelDoc(r, sz),
+        window.LabelRender.sizeOf(sz), window.TSCLabel.prod.gap);
+    }
   }
 
   async function printRow(i) {

@@ -5,3 +5,4 @@ private_source/
 private_source_items/
 _test/
 *.plain.json
+_render.html

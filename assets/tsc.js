@@ -133,6 +133,8 @@
   const ROLLS = {
     // 4-up butted (no gap between columns), only side margins. media = 2*side + 4*25 = 104mm.
     "25x15": { up: 4, labelW: 25, labelH: 15, side: 2, mid: 0, rowGap: 3 },
+    // 3-up butted product stock. media = 2*2 + 3*30 = 94mm.
+    "30x60": { up: 3, labelW: 30, labelH: 60, side: 2, mid: 0, rowGap: 3 },
   };
 
   // labelCanvases: one 203-dpi canvas per label (rendered at labelW wide).
