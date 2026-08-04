@@ -133,8 +133,10 @@
   const ROLLS = {
     // 4-up butted (no gap between columns), only side margins. media = 2*side + 4*25 = 104mm.
     "25x15": { up: 4, labelW: 25, labelH: 15, side: 2, mid: 0, rowGap: 3 },
-    // 3-up butted product stock. media = 2*2 + 3*30 = 94mm.
-    "30x60": { up: 3, labelW: 30, labelH: 60, side: 2, mid: 0, rowGap: 3 },
+    // 3-up butted product stock on the same 104mm liner as the 25x15 roll:
+    // media = 2*7 + 3*30 = 104mm. A 2mm side (94mm media) started the row 5mm
+    // left of the die-cuts and clipped the first label's left edge.
+    "30x60": { up: 3, labelW: 30, labelH: 60, side: 7, mid: 0, rowGap: 3 },
   };
 
   // labelCanvases: one 203-dpi canvas per label (rendered at labelW wide).

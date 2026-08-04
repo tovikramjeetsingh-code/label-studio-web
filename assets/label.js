@@ -11,11 +11,17 @@
   const SIZES = {
     "60x83": { w: 60, h: 83, m: 1.0, base: 1,    startY: 3.9, bcH: 11.5, bcPad: 5.7,
                sizeCap: 9, sizeVal: 18, headW: 40, skuPt: 9, tag: "60 × 83 mm" },
-    // Barcode runs vertically down the right edge (see barcodeDataURLRot).
-    // bcW = width of that strip; the text column gets what's left.
-    "30x60": { w: 30, h: 60, m: 0.8, base: 0.58, startY: 2.4, bcH: 8.0,  bcPad: 3.6,
-               sizeCap: 5, sizeVal: 11, headW: 18.2, skuPt: 4.4, tag: "30 × 60 mm",
-               vert: true, bcW: 8.2 },
+    // Horizontal barcode, but it encodes the numeric SKU ID rather than the full
+    // SKU code: the full alphanumeric needs ~190 Code-128 modules, which across
+    // 27mm is under one dot at 203dpi and will not scan. The digits are the
+    // Myntra sku id (a strict suffix of the sku code) and pack 2-per-codeword in
+    // subset C, giving ~2.5-3 dots per module.
+    // bcInset keeps a quiet zone either side of the bars. Code-128 wants >=10x
+    // the module width (~3.4mm here) and these labels are butted on the roll, so
+    // the neighbour's ink would otherwise sit right against the start pattern.
+    "30x60": { w: 30, h: 60, m: 0.8, base: 0.60, startY: 2.4, bcH: 7.5, bcPad: 3.2,
+               sizeCap: 5, sizeVal: 11, headW: 17, skuPt: 4.6, tag: "30 × 60 mm",
+               sizeLead: true, numericCode: true, bcInset: 2.0 },
   };
   let SZ = SIZES["60x83"];              // current size spec
 
@@ -55,21 +61,13 @@
 
   function barcodeDataURL(value) { return barcodeCanvas(value).toDataURL("image/png"); }
 
-  // Quarter-turn copy, so the bars can run along the label's LONG axis. On
-  // 30mm-wide stock a 17-char SKU needs ~189 modules; across 27mm that is under
-  // one dot at 203dpi and will not scan, but down 60mm it clears 2 dots.
-  // The human-readable code is baked in BEFORE rotating, so it can never drift
-  // out of the strip the way a separately-rotated text run can.
-  function barcodeDataURLRot(value) {
-    const src = barcodeCanvas(value, true);
-    const out = document.createElement("canvas");
-    out.width = src.height; out.height = src.width;
-    const ctx = out.getContext("2d");
-    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, out.width, out.height);
-    ctx.translate(out.width / 2, out.height / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.drawImage(src, -src.width / 2, -src.height / 2);
-    return out.toDataURL("image/png");
+  // What actually goes INTO the barcode on narrow stock: the trailing digits of
+  // the SKU code, which are the Myntra sku id (verified a strict suffix on all
+  // 8,837 catalog SKUs). Code-128 packs digit pairs into one codeword in subset
+  // C, so this fits at a scannable module width where the full string cannot.
+  function codeValue(sku) {
+    const m = String(sku).match(/(\d+)$/);
+    return m ? m[1] : String(sku);
   }
 
   // "Bold label: normal value" on one baseline, value wraps within maxW.
@@ -132,8 +130,7 @@
   function layoutContent(doc, row, s, draw) {
     const b = SZ.base * s;                       // size scale x fit scale
     const left = SZ.m + 0.6;
-    // A vertical barcode eats a strip off the right, so the text column narrows.
-    const rightEdge = SZ.w - SZ.m - 0.6 - (SZ.vert ? SZ.bcW + 0.8 : 0);
+    const rightEdge = SZ.w - SZ.m - 0.6;
     const fullW = rightEdge - left;
     const headW = Math.min(SZ.headW, fullW);
     const g = (k) => (row[k] == null ? "" : row[k]);
@@ -141,7 +138,7 @@
 
     // Narrow stock has no room for a top-right SIZE box beside the text, so the
     // size leads the flow instead — nothing can collide with it.
-    if (SZ.vert) {
+    if (SZ.sizeLead) {
       const cap = SZ.sizeCap * s, val = SZ.sizeVal * s;
       const baseline = y + val * PT;
       if (draw) {
@@ -190,10 +187,8 @@
   function drawLabel(doc, row) {
     const g = (k) => (row[k] == null ? "" : row[k]);
     const sku = String(g("sku code"));
-    // Vertical-barcode stock has the full page height for text; on the wide
-    // stock the text must stop above the horizontal barcode.
     const BC_TOP = barTop();
-    const textFloor = SZ.vert ? SZ.h - SZ.m : BC_TOP;
+    const textFloor = BC_TOP;
     // fit: measure at s=1, shrink if content would overrun the space available
     const used = layoutContent(doc, row, 1, false) - SZ.startY;
     const avail = textFloor - SZ.startY - 0.6;
@@ -202,7 +197,7 @@
 
     // Wide stock keeps the top-right SIZE box; the narrow one draws SIZE inline
     // at the head of the flow (see layoutContent).
-    if (!SZ.vert) {
+    if (!SZ.sizeLead) {
       const rightEdge = SZ.w - SZ.m - 0.6;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(SZ.sizeCap); doc.text("SIZE", rightEdge, SZ.startY + 0.5, { align: "right" });
@@ -211,17 +206,14 @@
     }
 
     if (!sku) return;
-    if (SZ.vert) {
-      // Bars run down the right edge; the SKU text is rotated to sit beside them.
-      const bx = SZ.w - SZ.m - SZ.bcW, by = SZ.m + 1.0;
-      const bh = SZ.h - by - SZ.m - 1.0;
-      try { doc.addImage(barcodeDataURLRot(sku), "PNG", bx, by, SZ.bcW, bh); } catch (e) {}
-    } else {
-      const left = SZ.m + 0.6, fullW = SZ.w - SZ.m - 0.6 - left;
-      try { doc.addImage(barcodeDataURL(sku), "PNG", left, BC_TOP, fullW, SZ.bcH); } catch (e) {}
-      doc.setFont("helvetica", "bold"); doc.setFontSize(SZ.skuPt);
-      doc.text(sku, SZ.w / 2, SZ.h - SZ.m - SZ.bcPad * 0.32, { align: "center" });
-    }
+    const encoded = SZ.numericCode ? codeValue(sku) : sku;
+    const left = SZ.m + 0.6, fullW = SZ.w - SZ.m - 0.6 - left;
+    const inset = SZ.bcInset || 0;
+    try {
+      doc.addImage(barcodeDataURL(encoded), "PNG", left + inset, BC_TOP, fullW - 2 * inset, SZ.bcH);
+    } catch (e) {}
+    doc.setFont("helvetica", "bold"); doc.setFontSize(SZ.skuPt);
+    doc.text(sku, SZ.w / 2, SZ.h - SZ.m - SZ.bcPad * 0.32, { align: "center" });
   }
 
   const sizeKeys = () => Object.keys(SIZES);
