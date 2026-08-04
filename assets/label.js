@@ -20,7 +20,7 @@
     // sits on the roll; w/h are the page we draw.
     "30x60": { w: 60, h: 30, m: 0.6, base: 0.62, startY: 1.9, bcH: 8.0, bcPad: 1.0,
                sizeCap: 7, sizeVal: 17, headW: 56, skuPt: 5.5, tag: "30 × 60 mm",
-               sizeLead: true, bcFull: true, keyScale: 3.0, leftFrac: 0.42,
+               sizeLead: true, bcFull: true, keyScale: 3.0, leftFrac: 0.42, qrSize: 13,
                skuText: false, maxFit: 3.0, rotate: true, wide: true,
                physW: 30, physH: 60 },
   };
@@ -173,7 +173,9 @@
     const left = SZ.m + 0.6, right = SZ.w - SZ.m - 0.6, fullW = right - left;
     const gut = 2.2;
     const keyW = fullW * (SZ.leftFrac || 0.4) - gut / 2;
-    const infoX = left + keyW + gut, infoW = right - infoX;
+    const qrW = SZ.qrSize || 0;
+    const infoX = left + keyW + gut;
+    const infoW = right - infoX - (qrW ? qrW + gut : 0);
     const g = (k) => (row[k] == null ? "" : row[k]);
     const pt = 8 * b;                       // right-hand body size
     const kp = pt * (SZ.keyScale || 2.1);   // left-hand key size
@@ -225,10 +227,16 @@
     ], infoX, iy, infoW, pt, draw) + EXTRA;
 
     iy = wrapped(doc, infoX, iy, infoW, pt * 0.95, "bold", "Designed & Marketed By:", 0, draw) + 0.3 * b;
-    iy = wrapped(doc, infoX, iy, infoW, pt * 0.85, "normal", C.DESIGNED_BY, 0, draw) + 0.7 * b + EXTRA;
-    iy = wrapped(doc, infoX, iy, infoW, pt * 0.95, "bold", "Manufactured & Packed By:", 0, draw) + 0.3 * b;
-    iy = wrapped(doc, infoX, iy, infoW, pt * 0.85, "normal", C.MANUFACTURED_BY, 0, draw);
+    iy = wrapped(doc, infoX, iy, infoW, pt * 0.85, "normal", C.DESIGNED_BY, 0, draw);
 
+    // QR of the full SKU code, right of the info block
+    if (qrW && draw) {
+      const sku = String(g("sku code"));
+      if (sku) {
+        const qx = right - qrW, qy = SZ.startY;
+        try { doc.addImage(window.ItemLabel.qrDataURL(sku), "PNG", qx, qy, qrW, qrW); } catch (e) {}
+      }
+    }
     return Math.max(ky, iy);
   }
 
