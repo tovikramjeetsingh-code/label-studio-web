@@ -19,9 +19,10 @@
     // bcInset keeps a quiet zone either side of the bars. Code-128 wants >=10x
     // the module width (~3.4mm here) and these labels are butted on the roll, so
     // the neighbour's ink would otherwise sit right against the start pattern.
-    "30x60": { w: 30, h: 60, m: 0.8, base: 0.60, startY: 2.4, bcH: 7.5, bcPad: 3.2,
-               sizeCap: 5, sizeVal: 11, headW: 17, skuPt: 5.8, tag: "30 × 60 mm",
-               sizeLead: true, numericCode: true, bcInset: 2.0, mrpScale: 1.22 },
+    "30x60": { w: 30, h: 60, m: 0.8, base: 0.78, startY: 2.4, bcH: 8.5, bcPad: 1.6,
+               sizeCap: 6, sizeVal: 16, headW: 17, skuPt: 5.8, tag: "30 × 60 mm",
+               sizeLead: true, numericCode: true, bcFull: true, mrpScale: 1.22,
+               sellerScale: 1.25, skuText: false },
   };
   let SZ = SIZES["60x83"];              // current size spec
 
@@ -159,7 +160,8 @@
     y = labelValue(doc, left, y, headW, 8 * b, "Country of Origin:", C.COUNTRY_OF_ORIGIN, draw);
 
     let cy = Math.max(y, 13 * SZ.base) + 1.2 * b;
-    cy = labelValue(doc, left, cy, fullW, 8 * b, "Seller SKU:", g("seller sku code"), draw) + 1.0 * b;
+    const ss = SZ.sellerScale || 1;
+    cy = labelValue(doc, left, cy, fullW, 8 * b * ss, "Seller SKU:", g("seller sku code"), draw) + 1.0 * b;
 
     // MRP
     const ms = SZ.mrpScale || 1;
@@ -210,12 +212,18 @@
     if (!sku) return;
     const encoded = SZ.numericCode ? codeValue(sku) : sku;
     const left = SZ.m + 0.6, fullW = SZ.w - SZ.m - 0.6 - left;
-    const inset = SZ.bcInset || 0;
-    try {
-      doc.addImage(barcodeDataURL(encoded), "PNG", left + inset, BC_TOP, fullW - 2 * inset, SZ.bcH);
-    } catch (e) {}
-    doc.setFont("helvetica", "bold"); doc.setFontSize(SZ.skuPt);
-    doc.text(sku, SZ.w / 2, SZ.h - SZ.m - SZ.bcPad * 0.32, { align: "center" });
+    // 2/3 of the catalog has a 9-digit sku id = 101 Code-128 modules, which needs
+    // >=25.3mm to clear 2 dots per module at 203dpi (below that it stops
+    // decoding). So the bars use the label's whole width, not the text column.
+    // The quiet zone is thin against the die-cut, but the neighbouring label's
+    // own margin keeps ~2mm of white before any adjacent ink.
+    const bx = SZ.bcFull ? SZ.m : left;
+    const bw = SZ.bcFull ? SZ.w - 2 * SZ.m : fullW;
+    try { doc.addImage(barcodeDataURL(encoded), "PNG", bx, BC_TOP, bw, SZ.bcH); } catch (e) {}
+    if (SZ.skuText !== false) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(SZ.skuPt);
+      doc.text(sku, SZ.w / 2, SZ.h - SZ.m - SZ.bcPad * 0.32, { align: "center" });
+    }
   }
 
   const sizeKeys = () => Object.keys(SIZES);

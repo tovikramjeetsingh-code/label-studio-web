@@ -11,7 +11,7 @@
     midGap: 1,                // gap between the two columns, mm
     rowGap: 3,                // gap between rows, mm
     mediaW: 107,              // 3 + 50 + 1 + 50 + 3
-    density: 10,             // darkness 0..15 (tune if too light/dark)
+    density: 13,             // darkness 0..15 (tune if too light/dark)
     speed: 4,                // ips
     direction: 1,            // 0 or 1 — flip if labels print upside down
     barNarrow: 2, barWide: 4, barHeight: 64,   // Code-128 (dots)
@@ -133,17 +133,18 @@
   const ROLLS = {
     // 4-up butted (no gap between columns), only side margins. media = 2*side + 4*25 = 104mm.
     "25x15": { up: 4, labelW: 25, labelH: 15, side: 2, mid: 0, rowGap: 3 },
-    // 3-up butted product stock on the same 104mm liner as the 25x15 roll:
-    // media = 2*7 + 3*30 = 104mm. A 2mm side (94mm media) started the row 5mm
-    // left of the die-cuts and clipped the first label's left edge.
-    "30x60": { up: 3, labelW: 30, labelH: 60, side: 7, mid: 0, rowGap: 3 },
+    // 3-up butted product stock, 104mm liner. sideL/sideR are asymmetric: the
+    // printer loses the first few mm on the left, so the row starts further in
+    // and the slack is taken off the right. Raise sideL if the first label is
+    // still clipped, or use the X alignment nudge for a per-machine tweak.
+    "30x60": { up: 3, labelW: 30, labelH: 60, sideL: 11, sideR: 3, mid: 0, rowGap: 3 },
   };
 
   // labelCanvases: one 203-dpi canvas per label (rendered at labelW wide).
   function buildMultiUpBitmapTSPL(labelCanvases, rollKey, copies) {
     const g = ROLLS[rollKey];
     const dot = (mm) => Math.round(mm * G.dpi / 25.4);
-    const mediaW = g.side * 2 + g.up * g.labelW + (g.up - 1) * g.mid;
+    const mediaW = mediaWidth(rollKey);
     const rowW = dot(mediaW), rowH = dot(g.labelH);
     const rows = [];
     for (let i = 0; i < labelCanvases.length; i += g.up) {
@@ -152,7 +153,7 @@
       const cx = cv.getContext("2d");
       cx.fillStyle = "#fff"; cx.fillRect(0, 0, rowW, rowH);
       for (let j = 0; j < g.up && i + j < labelCanvases.length; j++) {
-        cx.drawImage(labelCanvases[i + j], dot(g.side + j * (g.labelW + g.mid)), 0, dot(g.labelW), rowH);
+        cx.drawImage(labelCanvases[i + j], dot(sideL(g) + j * (g.labelW + g.mid)), 0, dot(g.labelW), rowH);
       }
       rows.push(cv);
     }
@@ -170,14 +171,19 @@
     return concat([enc(`CLS\r\nBITMAP ${offX()},0,${wbytes},${h},0,`), bytes,
       enc(`\r\nPRINT 1,${Math.max(1, copies || 1)}\r\n`)]);
   }
-  function mediaWidth(rollKey) { const g = ROLLS[rollKey]; return g.side * 2 + g.up * g.labelW + (g.up - 1) * g.mid; }
+  const sideL = (g) => (g.sideL == null ? g.side : g.sideL);
+  const sideR = (g) => (g.sideR == null ? g.side : g.sideR);
+  function mediaWidth(rollKey) {
+    const g = ROLLS[rollKey];
+    return sideL(g) + sideR(g) + g.up * g.labelW + (g.up - 1) * g.mid;
+  }
   // Composite up to `up` label canvases into one row canvas (203 dpi).
   function compositeRow(upCanvases, rollKey) {
     const g = ROLLS[rollKey], dot = (mm) => Math.round(mm * G.dpi / 25.4);
     const cv = document.createElement("canvas");
     cv.width = dot(mediaWidth(rollKey)); cv.height = dot(g.labelH);
     const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height);
-    upCanvases.forEach((c, j) => cx.drawImage(c, dot(g.side + j * (g.labelW + g.mid)), 0, dot(g.labelW), cv.height));
+    upCanvases.forEach((c, j) => cx.drawImage(c, dot(sideL(g) + j * (g.labelW + g.mid)), 0, dot(g.labelW), cv.height));
     return cv;
   }
 
