@@ -20,8 +20,8 @@
     // the module width (~3.4mm here) and these labels are butted on the roll, so
     // the neighbour's ink would otherwise sit right against the start pattern.
     "30x60": { w: 30, h: 60, m: 0.8, base: 0.60, startY: 2.4, bcH: 7.5, bcPad: 3.2,
-               sizeCap: 5, sizeVal: 11, headW: 17, skuPt: 4.6, tag: "30 × 60 mm",
-               sizeLead: true, numericCode: true, bcInset: 2.0 },
+               sizeCap: 5, sizeVal: 11, headW: 17, skuPt: 5.8, tag: "30 × 60 mm",
+               sizeLead: true, numericCode: true, bcInset: 2.0, mrpScale: 1.22 },
   };
   let SZ = SIZES["60x83"];              // current size spec
 
@@ -162,19 +162,21 @@
     cy = labelValue(doc, left, cy, fullW, 8 * b, "Seller SKU:", g("seller sku code"), draw) + 1.0 * b;
 
     // MRP
+    const ms = SZ.mrpScale || 1;
     const mrpBaseline = cy + 3.2 * b;
     if (draw) {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9 * b);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9 * b * ms);
       doc.text("MRP:", left, mrpBaseline);
       let mx = left + doc.getTextWidth("MRP: ");
-      const valSize = 13 * b, rp = rupeeImage(), rpH = valSize * PT * 1.02, rpW = rpH * rp.ratio;
+      const valSize = 13 * b * ms, rp = rupeeImage(), rpH = valSize * PT * 1.02, rpW = rpH * rp.ratio;
       doc.addImage(rp.url, "PNG", mx, mrpBaseline - rpH * 0.82, rpW, rpH);
       mx += rpW + 0.3;
+      doc.setFont("helvetica", "bold");   // keep the amount bold, explicitly
       doc.setFontSize(valSize); doc.text(String(g("mrp")), mx, mrpBaseline);
       doc.setFont("helvetica", "normal"); doc.setFontSize(6 * b);
       doc.text("(Incl. of all Taxes)", left, mrpBaseline + 2.4 * b);
     }
-    cy = mrpBaseline + 6.0 * b;
+    cy = mrpBaseline + 6.0 * b * ms;
 
     // addresses — headings wrap too, or they run into the barcode strip
     cy = wrapped(doc, left, cy, fullW, 8 * b, "bold", "Designed & Marketed By:", 0, draw) + 0.6 * b;
