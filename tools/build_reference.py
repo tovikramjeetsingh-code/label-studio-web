@@ -25,6 +25,7 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "..", "private_source")
+FIXES = os.path.join(HERE, "..", "private_source_fixes", "sku_overrides.csv")
 OUT = os.path.join(HERE, "..", "assets", "reference.enc.js")
 ITERS = 200_000
 
@@ -65,6 +66,22 @@ def read_rows(path):
         return reader.fieldnames, list(reader)
 
 
+def load_overrides():
+    """Manual decisions on listings whose seller sku code == sku code, keyed by
+    (sku id, the seller sku as it appears in the report). action is either DROP
+    or the seller SKU the listing should really carry."""
+    if not os.path.exists(FIXES):
+        return {}
+    out = {}
+    with open(FIXES, newline="", encoding="utf-8-sig") as fh:
+        for r in csv.DictReader(fh):
+            sid, cur = clean(r.get("sku_id")).lower(), clean(r.get("current_seller_sku")).lower()
+            act = clean(r.get("action"))
+            if sid and act:
+                out[(sid, cur)] = act
+    return out
+
+
 def build_master():
     files = sorted(glob.glob(os.path.join(SRC, "*.csv")) + glob.glob(os.path.join(SRC, "*.xlsx")))
     if not files:
@@ -90,6 +107,8 @@ def build_master():
             if a and b and a.lower() != b.lower():
                 proper.add(a.lower())
     dropped_dupes = 0
+    overrides = load_overrides()
+    n_dropped_manual = n_fixed_manual = 0
     for path in files:
         hdr, rows = read_rows(path)
         lut = {(c or "").strip().lower().rstrip(":"): c for c in hdr}
@@ -105,8 +124,17 @@ def build_master():
             # The same SKU is often listed on both seller accounts with identical
             # label fields — keep one record so the finder doesn't show (and
             # print) every size twice.
+            sid_raw = clean(r.get(skuid_col)) if skuid_col else ""
+            # manual decisions win over everything else
+            act = overrides.get((sid_raw.lower(), rec["ss"].lower()))
+            if act:
+                if act.upper() == "DROP":
+                    n_dropped_manual += 1
+                    continue
+                rec["ss"] = act            # the seller SKU the listing should carry
+                n_fixed_manual += 1
             # seller sku == sku code, and a proper listing exists for it -> skip
-            if (rec["sk"] and rec["ss"].lower() == rec["sk"].lower()
+            elif (rec["sk"] and rec["ss"].lower() == rec["sk"].lower()
                     and rec["sk"].lower() in proper):
                 dropped_dupes += 1
                 continue
@@ -119,10 +147,12 @@ def build_master():
                 by_seller[rec["ss"].lower()] = idx
             if rec["sk"]:
                 by_sku[rec["sk"].lower()] = idx
-            sid = clean(r.get(skuid_col)).lower() if skuid_col else ""
+            sid = sid_raw.lower()
             if sid:
                 by_skuid[sid] = idx
         sources.append(f"{os.path.basename(path)} ({n})")
+    if overrides:
+        print(f"  overrides: dropped {n_dropped_manual}, corrected the seller sku on {n_fixed_manual}")
     if dropped_dupes:
         print(f"  dropped {dropped_dupes} rows whose seller sku code == sku code "
               f"(a proper listing exists for the same SKU)")
