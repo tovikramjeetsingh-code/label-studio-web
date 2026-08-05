@@ -71,6 +71,25 @@ def build_master():
         sys.exit(f"No listing files in {os.path.abspath(SRC)} — move the Seller Listings Reports there first.")
     records, by_seller, by_sku, by_skuid, sources = [], {}, {}, {}, []
     seen = set()
+
+    # Some listings carry the SKU code in the seller-sku field, so the two are
+    # identical. When the same SKU is also listed properly (usually on the other
+    # account) that bad row must lose, or a lookup by SKU code hands back a
+    # seller SKU that matches nothing in OMS or an STN — which silently breaks
+    # reconcile and the scan tab. Work out which SKUs have a proper row first.
+    proper = set()
+    for path in files:
+        _hdr, _rows = read_rows(path)
+        lut = {(c or "").strip().lower().rstrip(":"): c for c in _hdr}
+        sc = next((lut[a] for a in ALIASES["sku code"] if a in lut), None)
+        ss = next((lut[a] for a in ALIASES["seller sku code"] if a in lut), None)
+        if not sc or not ss:
+            continue
+        for r in _rows:
+            a, b = clean(r.get(sc)), clean(r.get(ss))
+            if a and b and a.lower() != b.lower():
+                proper.add(a.lower())
+    dropped_dupes = 0
     for path in files:
         hdr, rows = read_rows(path)
         lut = {(c or "").strip().lower().rstrip(":"): c for c in hdr}
@@ -86,6 +105,11 @@ def build_master():
             # The same SKU is often listed on both seller accounts with identical
             # label fields — keep one record so the finder doesn't show (and
             # print) every size twice.
+            # seller sku == sku code, and a proper listing exists for it -> skip
+            if (rec["sk"] and rec["ss"].lower() == rec["sk"].lower()
+                    and rec["sk"].lower() in proper):
+                dropped_dupes += 1
+                continue
             dedupe_key = (rec["ss"].lower(), rec["sk"].lower())
             if dedupe_key in seen:
                 continue
@@ -99,6 +123,9 @@ def build_master():
             if sid:
                 by_skuid[sid] = idx
         sources.append(f"{os.path.basename(path)} ({n})")
+    if dropped_dupes:
+        print(f"  dropped {dropped_dupes} rows whose seller sku code == sku code "
+              f"(a proper listing exists for the same SKU)")
     return {
         "meta": {"count": len(records), "built": datetime.date.today().isoformat(), "sources": sources},
         "records": records, "bySeller": by_seller, "bySku": by_sku, "bySkuId": by_skuid,
