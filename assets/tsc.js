@@ -27,6 +27,24 @@
   const offX = () => Math.max(0, D(OFFSET.x));   // REFERENCE/BITMAP x must be >= 0
   const offY = () => D(OFFSET.y);                // SHIFT accepts negative (up)
 
+  // Redraw a label canvas with the alignment nudge applied in pixels.
+  // Asking the printer to do it does not work for bitmap jobs: the image is
+  // byte-padded to the full media width, so BITMAP x=n overruns the label and
+  // TSPL firmware drops or clips it instead of shifting; SHIFT is a setup-level
+  // command that several firmwares ignore once the CLS/PRINT loop is running.
+  // Moving the pixels ourselves always works. Content pushed past an edge is
+  // clipped, which is what a nudge should do anyway.
+  function nudged(cv) {
+    const dx = D(OFFSET.x), dy = D(OFFSET.y);
+    if (!dx && !dy) return cv;
+    const out = document.createElement("canvas");
+    out.width = cv.width; out.height = cv.height;
+    const cx = out.getContext("2d");
+    cx.fillStyle = "#fff"; cx.fillRect(0, 0, out.width, out.height);
+    cx.drawImage(cv, dx, dy);
+    return out;
+  }
+
   // Commands for ONE label whose left edge is at `lx` dots.
   function labelCmds(lx, rec, codeType) {
     const item = clean(rec["item code"]);
@@ -118,10 +136,10 @@
     const gap = gapMm == null ? PROD.gap : gapMm;
     const parts = [enc(
       `SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\nGAP ${gap} mm,0 mm\r\n` +
-      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT ${offY()}\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`)];
+      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT 0\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`)];
     canvases.forEach((cv, i) => {
-      const { wbytes, h, bytes } = canvasToBitmap(cv);
-      parts.push(enc(`CLS\r\nBITMAP ${offX()},0,${wbytes},${h},0,`));
+      const { wbytes, h, bytes } = canvasToBitmap(nudged(cv));
+      parts.push(enc(`CLS\r\nBITMAP 0,0,${wbytes},${h},0,`));
       parts.push(bytes);
       parts.push(enc(`\r\nPRINT 1,${nOf(i)}\r\n`));
     });
@@ -164,11 +182,11 @@
   function bitmapHeader(sizeMm, gapMm) {
     const gap = gapMm == null ? PROD.gap : gapMm;
     return enc(`SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\nGAP ${gap} mm,0 mm\r\n` +
-      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT ${offY()}\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`);
+      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT 0\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`);
   }
   function bitmapLabel(canvas, copies) {
-    const { wbytes, h, bytes } = canvasToBitmap(canvas);
-    return concat([enc(`CLS\r\nBITMAP ${offX()},0,${wbytes},${h},0,`), bytes,
+    const { wbytes, h, bytes } = canvasToBitmap(nudged(canvas));
+    return concat([enc(`CLS\r\nBITMAP 0,0,${wbytes},${h},0,`), bytes,
       enc(`\r\nPRINT 1,${Math.max(1, copies || 1)}\r\n`)]);
   }
   const sideL = (g) => (g.sideL == null ? g.side : g.sideL);
