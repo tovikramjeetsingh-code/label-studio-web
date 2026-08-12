@@ -11,6 +11,11 @@
   const SIZES = {
     "60x83": { w: 60, h: 83, m: 1.0, base: 1,    startY: 3.9, bcH: 11.5, bcPad: 5.7,
                sizeCap: 9, sizeVal: 18, headW: 40, skuPt: 9, tag: "60 × 83 mm" },
+    // 65x90 is the same shape as 60x83 (1.083 vs 1.084), so it is that layout
+    // scaled up rather than a new one — every field, both addresses, and a 1D
+    // barcode with more room than the 60x83 has (308um/module vs 284).
+    "65x90": { w: 65, h: 90, m: 1.1, base: 1.08, startY: 4.2, bcH: 12.5, bcPad: 6.2,
+               sizeCap: 10, sizeVal: 19.5, headW: 43, skuPt: 10, tag: "65 × 90 mm" },
     // 30x60 stock, PORTRAIT and QR-only. A Code-128 of the full 16-18 char SKU
     // needs ~50mm of run, which is why this size was rotated while it carried
     // one; a QR of the same string is 25 modules square and fits the 30mm width
