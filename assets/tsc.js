@@ -149,8 +149,10 @@
   // --- multi-up bitmap rolls (composite N labels per row, then BITMAP the row) ---
   // Geometry per size (edit to calibrate). up = labels across; mm.
   const ROLLS = {
-    // 4-up butted (no gap between columns), only side margins. media = 2*side + 4*25 = 104mm.
-    "25x15": { up: 4, labelW: 25, labelH: 15, side: 2, mid: 0, rowGap: 3 },
+    // 4-up butted (no gap between columns). Media stays 104mm, but the margins
+    // are asymmetric: the row was landing too far right and clipping the last
+    // column, so it starts 1.5mm earlier and the slack moves to the right side.
+    "25x15": { up: 4, labelW: 25, labelH: 15, sideL: 0.5, sideR: 3.5, mid: 0, rowGap: 3 },
     // 3-up butted product stock, 104mm liner. sideL/sideR are asymmetric: the
     // printer loses the first few mm on the left, so the row starts further in
     // and the slack is taken off the right. Raise sideL if the first label is

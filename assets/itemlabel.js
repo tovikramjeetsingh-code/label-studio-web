@@ -101,23 +101,51 @@
     }
   }
 
+  // Wrap a seller SKU preferring its hyphens, so it breaks as Kia-Gib-/Beige-38
+  // rather than mid-word. Falls back to character splitting for a long run with
+  // no hyphen in it.
+  function wrapSku(doc, sku, width) {
+    const parts = String(sku).split("-");
+    const lines = [];
+    let cur = "";
+    parts.forEach((part, i) => {
+      const piece = part + (i < parts.length - 1 ? "-" : "");
+      if (cur && doc.getTextWidth(cur + piece) > width) { lines.push(cur); cur = piece; }
+      else cur += piece;
+    });
+    if (cur) lines.push(cur);
+    // any single piece still too wide gets split on characters
+    const out = [];
+    lines.forEach((ln) => {
+      if (doc.getTextWidth(ln) <= width) out.push(ln);
+      else out.push(...doc.splitTextToSize(ln, width));
+    });
+    return out;
+  }
+
   // ---- 25 x 15 mm : small — code + item code + seller SKU ----
   function draw25x15(doc, rec, codeType) {
     const W = 25, H = 15, M = 1;
     const item = String(rec["item code"] || ""), sku = String(rec["seller sku code"] || "");
     if (codeType === "qr") {
-      // large QR filling the sticker height on the left; item code + SKU on the right
-      const qrSize = 11.8, qrX = 0.8, qrY = (H - qrSize) / 2;
+      // QR on the left, item code + seller SKU on the right. The QR is trimmed
+      // a little (still 3.4 dots per module at 203dpi, comfortably scannable) to
+      // widen the text column, and the SKU is set larger than the item code —
+      // the SKU is what a person reads, the item code is what gets scanned.
+      const qrSize = 10.5, qrX = 0.5, qrY = (H - qrSize) / 2;
       if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
-      const rx = qrX + qrSize + 0.7, rw = W - 0.5 - rx;
-      // item code: shrink font until it fits the column (never clips)
+      const rx = qrX + qrSize + 0.8, rw = W - 0.6 - rx;
+      // item code: smaller, still shrinks further if a long one would clip
+      doc.setFont("helvetica", "normal");
+      let fs = 4.6; doc.setFontSize(fs);
+      while (doc.getTextWidth(item) > rw && fs > 3.4) { fs -= 0.2; doc.setFontSize(fs); }
+      doc.text(item, rx, 4.4);
+      // seller SKU: the readable one
       doc.setFont("helvetica", "bold");
-      let fs = 5.8; doc.setFontSize(fs);
-      while (doc.getTextWidth(item) > rw && fs > 3.6) { fs -= 0.2; doc.setFontSize(fs); }
-      doc.text(item, rx, 5.2);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(4.4);
-      let y = 8.4;
-      doc.splitTextToSize(sku, rw).slice(0, 3).forEach((ln) => { doc.text(ln, rx, y); y += 2.3; });
+      let sf = 6.0; doc.setFontSize(sf);
+      while (wrapSku(doc, sku, rw).length > 2 && sf > 4.2) { sf -= 0.2; doc.setFontSize(sf); }
+      let y = 8.2;
+      wrapSku(doc, sku, rw).slice(0, 2).forEach((ln) => { doc.text(ln, rx, y); y += sf * 1.15 * 0.3528; });
     } else {
       const side = 1, bw = W - 2 * side;
       if (item) { try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", side, 1.5, bw, 6.5); } catch (e) {} }
