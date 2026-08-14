@@ -21,14 +21,45 @@
   // Printer setup is per-machine: a different printer needs its own darkness,
   // speed, feed direction and gap. These override the defaults above and are
   // sent in the header of every job.
+  // media: "gap" die-cut labels | "continuous" plain roll | "bline" black mark
+  G.media = "gap";
+  G.tear = false;      // tear-off advances the label after printing — that extra
+                       // feed reads as a blank band after the content
   function setPrinter(o) {
     if (!o) return;
     if (o.density !== undefined && o.density !== "") G.density = Math.max(0, Math.min(15, parseInt(o.density, 10) || 0));
     if (o.speed !== undefined && o.speed !== "") G.speed = Math.max(1, parseInt(o.speed, 10) || 4);
     if (o.direction !== undefined && o.direction !== "") G.direction = parseInt(o.direction, 10) ? 1 : 0;
     if (o.gap !== undefined && o.gap !== "") PROD.gap = Math.max(0, parseFloat(o.gap) || 0);
+    if (o.media) G.media = o.media;
+    if (o.tear !== undefined) G.tear = !!o.tear;
   }
-  const printerSetup = () => ({ density: G.density, speed: G.speed, direction: G.direction, gap: PROD.gap });
+  const printerSetup = () => ({ density: G.density, speed: G.speed, direction: G.direction,
+                                gap: PROD.gap, media: G.media, tear: G.tear });
+
+  // The media line the printer needs. Continuous stock must be told GAP 0 or the
+  // printer keeps feeding while it hunts for a gap that does not exist.
+  function mediaLine(gapMm) {
+    const g = gapMm == null ? PROD.gap : gapMm;
+    if (G.media === "continuous") return "GAP 0 mm,0 mm";
+    if (G.media === "bline") return `BLINE ${g} mm,0 mm`;
+    return `GAP ${g} mm,0 mm`;
+  }
+
+  // Everything that configures the printer, ahead of the label content.
+  function setupLines(sizeMm, gapMm) {
+    return `SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\n${mediaLine(gapMm)}\r\n` +
+      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT 0\r\n` +
+      `SET TEAR ${G.tear ? "ON" : "OFF"}\r\nSET PEEL OFF\r\nSET CUTTER OFF\r\n` +
+      `DENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`;
+  }
+
+  // One-off media calibration for a printer that has never seen this stock.
+  function calibrationJob(sizeMm) {
+    const cmd = `SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\n${mediaLine()}\r\n` +
+      (G.media === "bline" ? "BLINEDETECT\r\n" : G.media === "continuous" ? "" : "GAPDETECT\r\n");
+    return enc(cmd);
+  }
 
   const D = (mm) => Math.round(mm * G.dpi / 25.4);   // mm -> dots
   const clean = (s) => String(s == null ? "" : s).replace(/["\\\r\n]/g, " ").trim();
@@ -146,9 +177,7 @@
   function buildBitmapTSPL(canvases, sizeMm, copies, gapMm) {
     const nOf = (i) => { const c = Array.isArray(copies) ? copies[i] : copies; return Math.max(1, c || 1); };
     const gap = gapMm == null ? PROD.gap : gapMm;
-    const parts = [enc(
-      `SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\nGAP ${gap} mm,0 mm\r\n` +
-      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT 0\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`)];
+    const parts = [enc(setupLines(sizeMm, gap))];
     canvases.forEach((cv, i) => {
       const { wbytes, h, bytes } = canvasToBitmap(nudged(cv));
       parts.push(enc(`CLS\r\nBITMAP 0,0,${wbytes},${h},0,`));
@@ -195,8 +224,7 @@
   // --- streaming primitives: build ONE raw job for a whole batch (one QZ prompt) ---
   function bitmapHeader(sizeMm, gapMm) {
     const gap = gapMm == null ? PROD.gap : gapMm;
-    return enc(`SIZE ${sizeMm.w} mm,${sizeMm.h} mm\r\nGAP ${gap} mm,0 mm\r\n` +
-      `DIRECTION ${G.direction}\r\nREFERENCE 0,0\r\nSHIFT 0\r\nDENSITY ${G.density}\r\nSPEED ${G.speed}\r\n`);
+    return enc(setupLines(sizeMm, gap));
   }
   function bitmapLabel(canvas, copies) {
     const { wbytes, h, bytes } = canvasToBitmap(nudged(canvas));
@@ -221,7 +249,7 @@
 
   window.TSCLabel = {
     geom: G, prod: PROD, rolls: ROLLS, setOffset, offset: OFFSET,
-    setPrinter, printerSetup,
+    setPrinter, printerSetup, setupLines, calibrationJob,
     buildItemTSPL, buildBitmapTSPL, buildMultiUpBitmapTSPL,
     bitmapHeader, bitmapLabel, compositeRow, mediaWidth, concat,
   };

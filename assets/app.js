@@ -166,6 +166,7 @@
     const o = {
       density: $("pDensity").value, speed: $("pSpeed").value,
       gap: $("pGap").value, direction: $("pDirection").value,
+      media: $("pMedia").value, tear: $("pTear").checked,
     };
     window.TSCLabel.setPrinter(o);
     try { localStorage.setItem(PRINTER_KEY, JSON.stringify(o)); } catch (e) {}
@@ -178,11 +179,24 @@
         if (o.speed !== undefined) $("pSpeed").value = o.speed;
         if (o.gap !== undefined) $("pGap").value = o.gap;
         if (o.direction !== undefined) $("pDirection").value = o.direction;
+        if (o.media) $("pMedia").value = o.media;
+        if (o.tear !== undefined) $("pTear").checked = !!o.tear;
       }
     } catch (e) {}
     applyPrinterSetup();
-    ["pDensity", "pSpeed", "pGap", "pDirection"].forEach((id) =>
-      $(id).addEventListener("change", applyPrinterSetup));
+    ["pDensity", "pSpeed", "pGap", "pDirection", "pMedia", "pTear"].forEach((id) =>
+      $(id).addEventListener("change", () => { applyPrinterSetup(); showJobDump(true); }));
+
+    $("pShow").addEventListener("click", () => showJobDump());
+    $("pCalibrate").addEventListener("click", async () => {
+      if (!printConnected()) { $("qzInfo").innerHTML =
+        '<span style="color:var(--warn)">Connect the printer first.</span>'; return; }
+      applyPrinterSetup();
+      try {
+        await LP.printRawBytes(window.TSCLabel.calibrationJob(labelSize()), selectedPrinter());
+        $("qzInfo").innerHTML = "✅ Calibration sent — the printer will feed a label to measure the stock.";
+      } catch (e) { $("qzInfo").innerHTML = '<span style="color:var(--err)">✕ ' + esc(e.message) + "</span>"; }
+    });
   })();
 
   // Picklist stock, sent as the TSPL SIZE for that job.
@@ -204,6 +218,17 @@
       if (typeof renderPick === "function") renderPick();
     }));
   })();
+
+  // Show the exact setup the printer receives, so this is not a black box.
+  function showJobDump(onlyIfOpen) {
+    const pre = $("pDump");
+    if (onlyIfOpen && pre.classList.contains("hidden")) return;
+    applyPrinterSetup();
+    const size = MODE === "pick" ? pickSize() : labelSize();
+    pre.textContent = window.TSCLabel.setupLines(size, window.TSCLabel.prod.gap)
+      .replace(/\r\n/g, "\n") + "CLS\nBITMAP 0,0,…\nPRINT 1,1";
+    pre.classList.remove("hidden");
+  }
 
   function applyOffset() {
     const x = parseFloat($("offX").value) || 0, y = parseFloat($("offY").value) || 0;

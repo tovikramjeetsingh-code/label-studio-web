@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=41">
+<link rel="stylesheet" href="style.css?v=42">
 </head>
 <body>
 
@@ -146,7 +146,20 @@
       <select id="pDirection" style="padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px">
         <option value="1">1</option><option value="0">0</option>
       </select>
-      <span>sent with every job — set per machine. Gap 0 = continuous stock.</span>
+      Media
+      <select id="pMedia" style="padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px">
+        <option value="gap">Die-cut (gap)</option>
+        <option value="continuous">Continuous roll</option>
+        <option value="bline">Black mark</option>
+      </select>
+      <label style="cursor:pointer"><input type="checkbox" id="pTear"> Tear-off advance</label>
+      <button class="btn ghost" id="pCalibrate" style="padding:5px 12px;font-size:12px">Calibrate media</button>
+    </div>
+    <div style="margin-top:8px;font-size:12px;color:var(--muted)">
+      Sent with every job — set per machine. <b>Blank paper after the print</b> usually means
+      tear-off advance is on, or the stock is continuous but the printer is hunting for a gap.
+      <a id="pShow" style="color:var(--accent);cursor:pointer;font-weight:600">Show what's sent</a>
+      <pre id="pDump" class="hidden" style="margin:8px 0 0;padding:8px 10px;background:#f8fafc;border:1px solid var(--line);border-radius:6px;font-size:11.5px;white-space:pre-wrap"></pre>
     </div>
   </section>
 
@@ -280,16 +293,16 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=41"></script>
-<script src="assets/reference.enc.js?v=41"></script>
-<script src="assets/items.enc.js?v=41"></script>
-<script src="assets/parse.js?v=41"></script>
-<script src="assets/label.js?v=41"></script>
-<script src="assets/itemlabel.js?v=41"></script>
-<script src="assets/picklist.js?v=41"></script>
-<script src="assets/tsc.js?v=41"></script>
-<script src="assets/qz-cert.js?v=41"></script>
-<script src="assets/print.js?v=41"></script>
-<script src="assets/app.js?v=41"></script>
+<script src="assets/config.js?v=42"></script>
+<script src="assets/reference.enc.js?v=42"></script>
+<script src="assets/items.enc.js?v=42"></script>
+<script src="assets/parse.js?v=42"></script>
+<script src="assets/label.js?v=42"></script>
+<script src="assets/itemlabel.js?v=42"></script>
+<script src="assets/picklist.js?v=42"></script>
+<script src="assets/tsc.js?v=42"></script>
+<script src="assets/qz-cert.js?v=42"></script>
+<script src="assets/print.js?v=42"></script>
+<script src="assets/app.js?v=42"></script>
 </body>
 </html>
