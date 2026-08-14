@@ -48,14 +48,17 @@
     $("helpFind").classList.toggle("hidden", mode !== "find");
     $("helpScan").classList.toggle("hidden", mode !== "scan");
     $("uscanCard").classList.toggle("hidden", mode !== "scan");
+    $("helpPick").classList.toggle("hidden", mode !== "pick");
+    $("pickCard").classList.toggle("hidden", mode !== "pick");
     $("findCard").classList.toggle("hidden", mode !== "find");
     $("drop").classList.toggle("hidden", mode === "find");     // finder needs no upload
     $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
     // Product stock applies wherever a product label is produced.
     $("prodSizeRow").classList.toggle("hidden", mode === "item" || mode === "rack");
-    $("dropHint").textContent = (mode === "item" ? ".pdf" : ".csv · .xlsx") + " · multiple OK";
-    $("fileInput").accept = mode === "item" ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
+    const wantsPdf = mode === "item" || mode === "pick";
+    $("dropHint").textContent = (wantsPdf ? ".pdf" : ".csv · .xlsx") + " · multiple OK";
+    $("fileInput").accept = wantsPdf ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
     $("fileInput").multiple = true;
     ROWS = [];
     $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
@@ -65,6 +68,8 @@
     // The STN file is optional — a scanned SKU code resolves from the bundled
     // listings on its own, so open the scan station straight away.
     if (mode === "stn") { SCANS = []; renderScans(); showScanCard("no STN loaded"); }
+    if (mode === "pick") { PICK = null; $("pickTbl").querySelector("tbody").innerHTML = "";
+      $("pickToast").innerHTML = ""; $("pickBadge").textContent = "no picklist loaded"; }
     if (mode === "scan") { USCANS = []; renderUScans(); showUScanCard();
       setTimeout(() => $("uscanInput").focus(), 50); }
     if (mode === "find") { FIND_ROWS = []; $("findTbl").querySelector("tbody").innerHTML = "";
@@ -332,6 +337,9 @@
       return;
     }
 
+    // Picklist tab: PDFs in, 4x6 stickers out.
+    if (MODE === "pick") { await handlePicklists(files); return; }
+
     // Scan & print: uploads teach the app, they do not make a batch.
     if (MODE === "scan") {
       const notes = [];
@@ -501,6 +509,85 @@
     $("genCard").classList.remove("hidden");
     $("genCard").scrollIntoView({ behavior: "smooth", block: "center" });
     $("genBtn").click();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Picklist -> 4x6 stickers
+  // ---------------------------------------------------------------------------
+  let PICK = null;
+
+  function renderPick() {
+    const tb = $("pickTbl").querySelector("tbody");
+    tb.innerHTML = "";
+    if (!PICK) return;
+    PICK.rows.forEach((r, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td class="rownum">' + (i + 1) + "</td>" +
+        "<td><b>" + esc(r.sku) + "</b></td><td>" + esc(r.rack) + "</td>" +
+        "<td><b>" + esc(r.qty) + "</b></td><td class=\"src\">" + esc(r._src || "") + "</td>";
+      tb.appendChild(tr);
+    });
+    const pages = Math.max(1, Math.ceil(PICK.rows.length / window.Picklist.ROWS_PER_PAGE));
+    $("pickBadge").textContent = PICK.rows.length + " lines · " + PICK.meta.units +
+      " units · " + pages + " sticker" + (pages > 1 ? "s" : "");
+  }
+
+  async function handlePicklists(files) {
+    const all = [], notes = [];
+    let meta = null;
+    for (const f of files) {
+      try {
+        const p = await window.Picklist.parsePicklist(f);
+        if (!p.rows.length) {
+          notes.push('<div class="toast err">✕ ' + esc(f.name) + " — no picklist lines found in this PDF.</div>");
+          continue;
+        }
+        p.rows.forEach((r) => { r._src = p.meta.picklist || f.name; });
+        all.push(...p.rows);
+        meta = meta || p.meta;
+        notes.push('<div class="toast ok-toast">✓ ' + esc(f.name) + " — " + p.rows.length +
+          " lines, " + p.meta.units + " units.</div>");
+      } catch (e) {
+        notes.push('<div class="toast err">✕ ' + esc(f.name) + ": " + esc(e.message) + "</div>");
+      }
+    }
+    resetDrop();
+    if (!all.length) { PICK = null; renderPick(); $("pickToast").innerHTML = notes.join(""); return; }
+    PICK = { meta: { ...meta, lines: all.length, units: all.reduce((n, r) => n + r.qty, 0) }, rows: all };
+    if (files.length > 1) PICK.meta.picklist = (PICK.meta.picklist || "") + " +" + (files.length - 1);
+    renderPick();
+    $("pickToast").innerHTML = notes.join("");
+  }
+
+  $("pickPreview").addEventListener("click", () => {
+    if (!PICK) return;
+    const doc = window.Picklist.buildPicklistDoc(PICK);
+    $("pvFrame").src = doc.output("bloburl");
+    $("modal").style.display = "flex";
+  });
+  $("pickZip").addEventListener("click", () => {
+    if (!PICK) return;
+    const doc = window.Picklist.buildPicklistDoc(PICK);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(doc.output("blob"));
+    a.download = "picklist-" + (PICK.meta.picklist || "4x6") + ".pdf";
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  $("pickPrint").addEventListener("click", async () => {
+    if (!PICK) return;
+    if (!printConnected()) {
+      $("pickToast").innerHTML = '<div class="toast err">✕ Printer not connected — connect it under Direct printing.</div>';
+      return;
+    }
+    const pages = window.Picklist.buildPicklistPages(PICK);
+    $("pickToast").innerHTML = '<div class="toast">Printing ' + pages.length + " sticker(s)…</div>";
+    try {
+      applyOffset();
+      await printBitmaps(pages.map((d) => d), (d) => d, window.Picklist.size, window.TSCLabel.prod.gap);
+      $("pickToast").innerHTML = '<div class="toast ok-toast">✓ Sent to the printer.</div>';
+    } catch (e) {
+      $("pickToast").innerHTML = '<div class="toast err">✕ ' + esc(e.message) + "</div>";
+    }
   });
 
   // ---------------------------------------------------------------------------

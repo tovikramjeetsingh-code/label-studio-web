@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 </head>
 <body>
 
@@ -23,6 +23,7 @@
     <button class="modebtn" data-mode="stn">📡 Myntra STN</button>
     <button class="modebtn" data-mode="find">🔍 Find a label</button>
     <button class="modebtn" data-mode="scan">🎯 Scan &amp; print</button>
+    <button class="modebtn" data-mode="pick">📋 Picklist → 4 × 6</button>
   </div>
 
   <!-- Manual finder -->
@@ -76,6 +77,10 @@
       <b>Item-barcode export</b> (<code>item_barcode</code>, <code>sku_code</code>) — adds new <code>IB…</code> codes<br>
       <b>Seller Listings Report</b> — adds SKUs that aren't in the built-in catalog yet<br>
       Drop either one above; the type is detected automatically. If a scan fails, the message says which of the two to upload.</div>
+    <div class="sub hidden" id="helpPick">Upload the OMS <b>Picklist PDF</b> (one or several). Each becomes a
+      <b>4 × 6 inch</b> sticker listing <b>SKU · RACK · QTY</b> in the order the report gives them, which is already
+      grouped by rack so the picker walks the aisle in order. Long picklists continue onto further stickers,
+      28 lines each. <b>QTY</b> is the report's <b>Good</b> column — it sums to the picklist total.</div>
     <div class="sub hidden" id="helpFind">No file needed — search the built-in catalog in the <b>Find a label</b> panel below.</div>
     <div id="prodSizeRow" style="margin:2px 0 12px;font-size:13px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
       <b>Label size:</b>
@@ -152,6 +157,24 @@
     <div id="mapGrid"></div>
     <div id="mapToast"></div>
     <div style="margin-top:14px"><button class="btn primary" id="mapBtn">Apply mapping →</button></div>
+  </section>
+
+  <!-- Picklist -> 4x6 stickers -->
+  <section class="card hidden" id="pickCard">
+    <h2>Picklist <span id="pickBadge" class="pill ok"></span></h2>
+    <div class="sub">Check the lines, then print or download. One sticker per 28 lines.</div>
+    <div id="pickToast"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn ghost" id="pickPreview">Preview sticker</button>
+      <button class="btn primary" id="pickPrint">Print stickers</button>
+      <button class="btn ghost" id="pickZip">Download PDF</button>
+    </div>
+    <div class="tbl-wrap">
+      <table id="pickTbl">
+        <thead><tr><th>#</th><th>SKU</th><th>Rack</th><th>Qty</th><th>Picklist</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 
   <!-- General scan station: no file required, uploads extend the universe -->
@@ -240,15 +263,16 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=38"></script>
-<script src="assets/reference.enc.js?v=38"></script>
-<script src="assets/items.enc.js?v=38"></script>
-<script src="assets/parse.js?v=38"></script>
-<script src="assets/label.js?v=38"></script>
-<script src="assets/itemlabel.js?v=38"></script>
-<script src="assets/tsc.js?v=38"></script>
-<script src="assets/qz-cert.js?v=38"></script>
-<script src="assets/print.js?v=38"></script>
-<script src="assets/app.js?v=38"></script>
+<script src="assets/config.js?v=39"></script>
+<script src="assets/reference.enc.js?v=39"></script>
+<script src="assets/items.enc.js?v=39"></script>
+<script src="assets/parse.js?v=39"></script>
+<script src="assets/label.js?v=39"></script>
+<script src="assets/itemlabel.js?v=39"></script>
+<script src="assets/picklist.js?v=39"></script>
+<script src="assets/tsc.js?v=39"></script>
+<script src="assets/qz-cert.js?v=39"></script>
+<script src="assets/print.js?v=39"></script>
+<script src="assets/app.js?v=39"></script>
 </body>
 </html>
