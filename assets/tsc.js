@@ -18,6 +18,18 @@
     qrCell: 5,               // QR module size (dots)
   };
 
+  // Printer setup is per-machine: a different printer needs its own darkness,
+  // speed, feed direction and gap. These override the defaults above and are
+  // sent in the header of every job.
+  function setPrinter(o) {
+    if (!o) return;
+    if (o.density !== undefined && o.density !== "") G.density = Math.max(0, Math.min(15, parseInt(o.density, 10) || 0));
+    if (o.speed !== undefined && o.speed !== "") G.speed = Math.max(1, parseInt(o.speed, 10) || 4);
+    if (o.direction !== undefined && o.direction !== "") G.direction = parseInt(o.direction, 10) ? 1 : 0;
+    if (o.gap !== undefined && o.gap !== "") PROD.gap = Math.max(0, parseFloat(o.gap) || 0);
+  }
+  const printerSetup = () => ({ density: G.density, speed: G.speed, direction: G.direction, gap: PROD.gap });
+
   const D = (mm) => Math.round(mm * G.dpi / 25.4);   // mm -> dots
   const clean = (s) => String(s == null ? "" : s).replace(/["\\\r\n]/g, " ").trim();
 
@@ -209,6 +221,7 @@
 
   window.TSCLabel = {
     geom: G, prod: PROD, rolls: ROLLS, setOffset, offset: OFFSET,
+    setPrinter, printerSetup,
     buildItemTSPL, buildBitmapTSPL, buildMultiUpBitmapTSPL,
     bitmapHeader, bitmapLabel, compositeRow, mediaWidth, concat,
   };

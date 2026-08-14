@@ -161,6 +161,50 @@
 
   // alignment nudge (mm) — persisted, applied to raw TSPL
   const OFFSET_KEY = "labelStudioOffset_v1";
+  const PRINTER_KEY = "labelStudioPrinter_v1";
+  function applyPrinterSetup() {
+    const o = {
+      density: $("pDensity").value, speed: $("pSpeed").value,
+      gap: $("pGap").value, direction: $("pDirection").value,
+    };
+    window.TSCLabel.setPrinter(o);
+    try { localStorage.setItem(PRINTER_KEY, JSON.stringify(o)); } catch (e) {}
+  }
+  (function () {
+    try {
+      const o = JSON.parse(localStorage.getItem(PRINTER_KEY) || "null");
+      if (o) {
+        if (o.density !== undefined) $("pDensity").value = o.density;
+        if (o.speed !== undefined) $("pSpeed").value = o.speed;
+        if (o.gap !== undefined) $("pGap").value = o.gap;
+        if (o.direction !== undefined) $("pDirection").value = o.direction;
+      }
+    } catch (e) {}
+    applyPrinterSetup();
+    ["pDensity", "pSpeed", "pGap", "pDirection"].forEach((id) =>
+      $(id).addEventListener("change", applyPrinterSetup));
+  })();
+
+  // Picklist stock, sent as the TSPL SIZE for that job.
+  const PICKSIZE_KEY = "labelStudioPickSize_v1";
+  function pickSize() {
+    const w = parseFloat($("pickW").value) || window.Picklist.size.w;
+    const h = parseFloat($("pickH").value) || window.Picklist.size.h;
+    return { w, h };
+  }
+  (function () {
+    try {
+      const o = JSON.parse(localStorage.getItem(PICKSIZE_KEY) || "null");
+      if (o) { if (o.w) $("pickW").value = o.w; if (o.h) $("pickH").value = o.h; }
+    } catch (e) {}
+    ["pickW", "pickH"].forEach((id) => $(id).addEventListener("change", () => {
+      try { localStorage.setItem(PICKSIZE_KEY, JSON.stringify(pickSize())); } catch (e) {}
+      const el = $("pickPerPage");
+      if (el) el.textContent = window.Picklist.rowsPerPage(pickSize());
+      if (typeof renderPick === "function") renderPick();
+    }));
+  })();
+
   function applyOffset() {
     const x = parseFloat($("offX").value) || 0, y = parseFloat($("offY").value) || 0;
     window.TSCLabel.setOffset(x, y);
@@ -246,7 +290,7 @@
 
   // Every label type prints by talking straight to the printer (raw TSPL).
   async function sendPrint(rows) {
-    applyOffset();   // use the latest alignment nudge
+    applyOffset(); applyPrinterSetup();   // latest nudge + printer setup
     if (MODE === "rack") {
       const ct = itemCodeType();
       await printMultiUp(rows, (r) => window.ItemLabel.buildRackDoc(r, ct), "25x15");
@@ -519,7 +563,7 @@
   // keep the help text honest about the real capacity
   (function () {
     const el = $("pickPerPage");
-    if (el && window.Picklist) el.textContent = window.Picklist.ROWS_PER_PAGE;
+    if (el && window.Picklist) el.textContent = window.Picklist.rowsPerPage(pickSize());
   })();
 
   function renderPick() {
@@ -533,7 +577,7 @@
         "<td><b>" + esc(r.qty) + "</b></td><td class=\"src\">" + esc(r._src || "") + "</td>";
       tb.appendChild(tr);
     });
-    const pages = Math.max(1, Math.ceil(PICK.rows.length / window.Picklist.ROWS_PER_PAGE));
+    const pages = Math.max(1, Math.ceil(PICK.rows.length / window.Picklist.rowsPerPage(pickSize())));
     $("pickBadge").textContent = PICK.rows.length + " lines · " + PICK.meta.units +
       " units · " + pages + " sticker" + (pages > 1 ? "s" : "");
   }
@@ -567,13 +611,13 @@
 
   $("pickPreview").addEventListener("click", () => {
     if (!PICK) return;
-    const doc = window.Picklist.buildPicklistDoc(PICK);
+    const doc = window.Picklist.buildPicklistDoc(PICK, pickSize());
     $("pvFrame").src = doc.output("bloburl");
     $("modal").style.display = "flex";
   });
   $("pickZip").addEventListener("click", () => {
     if (!PICK) return;
-    const doc = window.Picklist.buildPicklistDoc(PICK);
+    const doc = window.Picklist.buildPicklistDoc(PICK, pickSize());
     const a = document.createElement("a");
     a.href = URL.createObjectURL(doc.output("blob"));
     a.download = "picklist-" + (PICK.meta.picklist || "4x6") + ".pdf";
@@ -585,11 +629,11 @@
       $("pickToast").innerHTML = '<div class="toast err">✕ Printer not connected — connect it under Direct printing.</div>';
       return;
     }
-    const pages = window.Picklist.buildPicklistPages(PICK);
+    const pages = window.Picklist.buildPicklistPages(PICK, pickSize());
     $("pickToast").innerHTML = '<div class="toast">Printing ' + pages.length + " sticker(s)…</div>";
     try {
-      applyOffset();
-      await printBitmaps(pages.map((d) => d), (d) => d, window.Picklist.size, window.TSCLabel.prod.gap);
+      applyOffset(); applyPrinterSetup();
+      await printBitmaps(pages.map((d) => d), (d) => d, pickSize(), window.TSCLabel.prod.gap);
       $("pickToast").innerHTML = '<div class="toast ok-toast">✓ Sent to the printer.</div>';
     } catch (e) {
       $("pickToast").innerHTML = '<div class="toast err">✕ ' + esc(e.message) + "</div>";

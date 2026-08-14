@@ -7,7 +7,7 @@
 // outcome columns, not demand).
 (function () {
   const PT = 0.352777778;
-  const W = 101.6, H = 152.4;          // 4 x 6 inches
+  const DEF = { w: 101.6, h: 152.4 };  // 4 x 6 inches
   const M = 4;
 
   // ---- parse -------------------------------------------------------------
@@ -59,15 +59,21 @@
   }
 
   // ---- render ------------------------------------------------------------
-  // Row geometry, and the rows-per-page derived from it so the two can never
-  // drift apart (a hardcoded count ran the last lines under the footer).
+  // Everything is derived from the sticker size so a different stock lays out
+  // correctly instead of being scaled to fit: rows per page follow the height,
+  // and the columns follow the width.
   const FIRST_ROW_Y = 29.9;      // baseline of row 1
   const LH = 4.35;               // row pitch
-  const FOOTER_RULE = H - M - 8.5;
-  const ROWS_PER_PAGE = Math.floor((FOOTER_RULE - 2.0 - FIRST_ROW_Y) / LH) + 1;
+  const footerRule = (h) => h - M - 8.5;
+  function rowsPerPage(size) {
+    const s = size || DEF;
+    return Math.max(1, Math.floor((footerRule(s.h) - 2.0 - FIRST_ROW_Y) / LH) + 1);
+  }
 
-  function drawPage(doc, meta, rows, pageNo, pageCount) {
+  function drawPage(doc, meta, rows, pageNo, pageCount, size) {
+    const W = size.w, H = size.h;
     const left = M, right = W - M, full = right - left;
+    const FOOTER_RULE = footerRule(H);
     let y = M + 5;
 
     doc.setFont("helvetica", "bold"); doc.setFontSize(15);
@@ -91,7 +97,9 @@
     y += 4.5;
 
     // column heads
-    const xSku = left, xRack = left + 46, xQty = right;
+    // columns scale with the label width (46/32 of a 4in sticker)
+    const skuW = full * 0.50, rackW = full * 0.34;
+    const xSku = left, xRack = left + skuW + 2, xQty = right;
     doc.setFont("helvetica", "bold"); doc.setFontSize(8);
     doc.text("SKU", xSku, y);
     doc.text("RACK", xRack, y);
@@ -104,12 +112,12 @@
     rows.forEach((r) => {
       doc.setFont("helvetica", "bold"); doc.setFontSize(9.5);
       let sku = r.sku, fs = 9.5;
-      while (doc.getTextWidth(sku) > 44 && fs > 6.5) { fs -= 0.3; doc.setFontSize(fs); }
+      while (doc.getTextWidth(sku) > skuW && fs > 6.5) { fs -= 0.3; doc.setFontSize(fs); }
       doc.text(sku, xSku, y);
 
       doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
       let rack = r.rack, rf = 8.5;
-      while (doc.getTextWidth(rack) > 32 && rf > 6) { rf -= 0.3; doc.setFontSize(rf); }
+      while (doc.getTextWidth(rack) > rackW && rf > 6) { rf -= 0.3; doc.setFontSize(rf); }
       doc.text(rack, xRack, y);
 
       doc.setFont("helvetica", "bold"); doc.setFontSize(11);
@@ -129,29 +137,31 @@
     doc.text(meta.units + " units", right, fy, { align: "right" });
   }
 
-  function buildPicklistDoc(parsed) {
+  function buildPicklistDoc(parsed, size) {
+    const s = size || DEF, n = rowsPerPage(s);
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "mm", format: [W, H], orientation: "portrait", compress: true });
-    const pages = Math.max(1, Math.ceil(parsed.rows.length / ROWS_PER_PAGE));
+    const doc = new jsPDF({ unit: "mm", format: [s.w, s.h], orientation: "portrait", compress: true });
+    const pages = Math.max(1, Math.ceil(parsed.rows.length / n));
     for (let p = 0; p < pages; p++) {
-      if (p > 0) doc.addPage([W, H], "portrait");
-      drawPage(doc, parsed.meta, parsed.rows.slice(p * ROWS_PER_PAGE, (p + 1) * ROWS_PER_PAGE), p + 1, pages);
+      if (p > 0) doc.addPage([s.w, s.h], "portrait");
+      drawPage(doc, parsed.meta, parsed.rows.slice(p * n, (p + 1) * n), p + 1, pages, s);
     }
     return doc;
   }
 
   // one single-page doc per sticker, for printing page by page
-  function buildPicklistPages(parsed) {
+  function buildPicklistPages(parsed, size) {
+    const s = size || DEF, n = rowsPerPage(s);
     const { jsPDF } = window.jspdf;
-    const pages = Math.max(1, Math.ceil(parsed.rows.length / ROWS_PER_PAGE));
+    const pages = Math.max(1, Math.ceil(parsed.rows.length / n));
     const out = [];
     for (let p = 0; p < pages; p++) {
-      const doc = new jsPDF({ unit: "mm", format: [W, H], orientation: "portrait", compress: true });
-      drawPage(doc, parsed.meta, parsed.rows.slice(p * ROWS_PER_PAGE, (p + 1) * ROWS_PER_PAGE), p + 1, pages);
+      const doc = new jsPDF({ unit: "mm", format: [s.w, s.h], orientation: "portrait", compress: true });
+      drawPage(doc, parsed.meta, parsed.rows.slice(p * n, (p + 1) * n), p + 1, pages, s);
       out.push(doc);
     }
     return out;
   }
 
-  window.Picklist = { parsePicklist, buildPicklistDoc, buildPicklistPages, size: { w: W, h: H }, ROWS_PER_PAGE };
+  window.Picklist = { parsePicklist, buildPicklistDoc, buildPicklistPages, rowsPerPage, size: DEF };
 })();
