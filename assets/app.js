@@ -55,7 +55,8 @@
     $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
     // Product stock applies wherever a product label is produced.
-    $("prodSizeRow").classList.toggle("hidden", mode === "item" || mode === "rack");
+    $("prodSizeRow").classList.toggle("hidden",
+      mode === "item" || mode === "rack" || mode === "pick");
     const wantsPdf = mode === "item" || mode === "pick";
     $("dropHint").textContent = (wantsPdf ? ".pdf" : ".csv · .xlsx") + " · multiple OK";
     $("fileInput").accept = wantsPdf ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
@@ -515,6 +516,11 @@
   // Picklist -> 4x6 stickers
   // ---------------------------------------------------------------------------
   let PICK = null;
+  // keep the help text honest about the real capacity
+  (function () {
+    const el = $("pickPerPage");
+    if (el && window.Picklist) el.textContent = window.Picklist.ROWS_PER_PAGE;
+  })();
 
   function renderPick() {
     const tb = $("pickTbl").querySelector("tbody");
