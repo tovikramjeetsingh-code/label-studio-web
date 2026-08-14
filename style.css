@@ -108,3 +108,9 @@ tr td a.pv, tr td a.pr { color: var(--accent); text-decoration: none; font-weigh
 }
 #findInput:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
 #scanInput:disabled { background: #f1f5f9; color: var(--muted); border-style: dashed; cursor: not-allowed; }
+#uscanInput {
+  width: 100%; margin-top: 10px; padding: 16px 18px; font-size: 22px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .5px;
+  border: 2px solid var(--line); border-radius: 10px; background: #fff;
+}
+#uscanInput:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37,99,235,.12); }

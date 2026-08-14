@@ -46,6 +46,8 @@
     $("helpRack").classList.toggle("hidden", mode !== "rack");
     $("helpStn").classList.toggle("hidden", mode !== "stn");
     $("helpFind").classList.toggle("hidden", mode !== "find");
+    $("helpScan").classList.toggle("hidden", mode !== "scan");
+    $("uscanCard").classList.toggle("hidden", mode !== "scan");
     $("findCard").classList.toggle("hidden", mode !== "find");
     $("drop").classList.toggle("hidden", mode === "find");     // finder needs no upload
     $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
@@ -63,6 +65,8 @@
     // The STN file is optional — a scanned SKU code resolves from the bundled
     // listings on its own, so open the scan station straight away.
     if (mode === "stn") { SCANS = []; renderScans(); showScanCard("no STN loaded"); }
+    if (mode === "scan") { USCANS = []; renderUScans(); showUScanCard();
+      setTimeout(() => $("uscanInput").focus(), 50); }
     if (mode === "find") { FIND_ROWS = []; $("findTbl").querySelector("tbody").innerHTML = "";
       $("findToast").innerHTML = ""; $("findPrintAll").classList.add("hidden");
       $("findZip").classList.add("hidden"); refreshFindUI();
@@ -112,7 +116,7 @@
   }
   // Global Copies applies to item/rack; product uses the per-row Copies column.
   function updateCopiesUI() {
-    const perRow = MODE === "product" || MODE === "stn";   // both use per-row copies
+    const perRow = MODE === "product" || MODE === "stn" || MODE === "scan";
     $("qzCopiesWrap").classList.toggle("hidden", !(printConnected() && !perRow));
   }
 
@@ -328,6 +332,38 @@
       return;
     }
 
+    // Scan & print: uploads teach the app, they do not make a batch.
+    if (MODE === "scan") {
+      const notes = [];
+      for (const f of files) {
+        let kind;
+        try { kind = await window.LabelParse.sniffUpload(f); }
+        catch (e) { notes.push('<div class="toast err">✕ ' + esc(f.name) + ": " + esc(e.message) + "</div>"); continue; }
+        try {
+          const res = kind === "items" ? await window.LabelParse.addItemBarcodes(f)
+                    : kind === "listings" ? await window.LabelParse.addListings(f)
+                    : null;
+          if (!res) {
+            notes.push('<div class="toast err">✕ ' + esc(f.name) +
+              " — not an item-barcode export or a Seller Listings Report.</div>");
+          } else if (!res.saved) {
+            notes.push('<div class="toast err">✕ ' + esc(f.name) + " — added " + res.added +
+              ", but this browser's storage is full so it won't be remembered.</div>");
+          } else {
+            notes.push('<div class="toast ok-toast">✓ ' + esc(f.name) + " — added <b>" + res.added +
+              "</b> new " + (res.kind === "items" ? "item barcode(s)" : "listing(s)") +
+              (res.already ? ", " + res.already + " already known" : "") + ".</div>");
+          }
+        } catch (e) {
+          notes.push('<div class="toast err">✕ ' + esc(f.name) + ": " + esc(e.message) + "</div>");
+        }
+      }
+      resetDrop();
+      showUScanCard(notes.join(""));
+      setTimeout(() => $("uscanInput").focus(), 50);
+      return;
+    }
+
     // STN scan: parse the STN file(s) into a lookup index, then wait for scans.
     if (MODE === "stn") {
       const all = [];
@@ -465,6 +501,114 @@
     $("genCard").classList.remove("hidden");
     $("genCard").scrollIntoView({ behavior: "smooth", block: "center" });
     $("genBtn").click();
+  });
+
+  // ---------------------------------------------------------------------------
+  // General scan station. No file needed: it resolves against the built-in
+  // universe plus anything the team has uploaded here before. A failed scan says
+  // exactly which of the two files would fix it, so the universe grows over time.
+  // ---------------------------------------------------------------------------
+  let USCANS = [], USCAN_BUSY = false;
+
+  function showUScanCard(msg) {
+    const im = window.LabelParse.itemsMeta();
+    const x = window.LabelParse.extrasMeta();
+    const ref = window.LabelParse.masterMeta();
+    $("uscanBadge").textContent = (ref ? ref.count.toLocaleString() + " SKUs" : "catalog loading") +
+      (im ? " · " + im.items.toLocaleString() + " item barcodes" : "");
+    const notes = [];
+    if (x.items || x.listings) {
+      notes.push('<div class="toast ok-toast">➕ Added on this device: <b>' + x.items +
+        "</b> item barcode(s), <b>" + x.listings + "</b> listing(s). Kept for next time.</div>");
+    }
+    if (!printConnected()) notes.push('<div class="toast warn">⚠ Printer not connected — ' +
+      "connect it under <b>Direct printing</b> before scanning.</div>");
+    if (msg) notes.push(msg);
+    $("uscanState").innerHTML = notes.join("");
+  }
+
+  // Resolve a scan and, when it fails, say which upload fixes it.
+  function resolveUScan(code) {
+    const raw = (code || "").trim();
+    const item = window.LabelParse.findItem(raw);
+
+    if (item) {
+      const row = window.LabelParse.rowFromReference(item.sku);
+      if (row) return { ok: true, item, row };
+      // barcode known, SKU not in the catalog -> needs a listings refresh
+      return { ok: false, item, need: "listings",
+        reason: "Item barcode maps to SKU " + item.sku +
+                ", but that SKU isn't in the listings. Upload the updated Seller Listings Report." };
+    }
+
+    // not an item barcode — maybe a SKU code or seller SKU typed directly
+    const direct = window.LabelParse.rowFromReference(raw);
+    if (direct) return { ok: true, row: direct };
+
+    if (/^IB\d+$/i.test(raw)) {
+      return { ok: false, need: "items",
+        reason: "Item barcode not in the item map. Upload the updated item-barcode file." };
+    }
+    return { ok: false, need: null,
+      reason: "Not recognised as an item barcode, SKU code or seller SKU code." };
+  }
+
+  async function onUScan(code) {
+    if (USCAN_BUSY) return;
+    const raw = (code || "").trim();
+    if (!raw) return;
+    USCAN_BUSY = true;
+    const res = resolveUScan(raw);
+    let result;
+    if (!res.ok) result = { cls: "err", text: res.reason, need: res.need };
+    else if (!printConnected()) result = { cls: "err", text: "Printer not connected — connect it under Direct printing." };
+    else {
+      try { await sendPrint([{ ...res.row, _qty: 1 }]); result = { cls: "ok", text: "Printed" }; }
+      catch (e) { result = { cls: "err", text: "Print failed: " + e.message }; }
+    }
+    USCANS.unshift({ code: raw, item: res.item, row: res.ok ? res.row : null, result });
+    renderUScans();
+    USCAN_BUSY = false;
+  }
+
+  function renderUScans() {
+    const tb = $("uscanTbl").querySelector("tbody");
+    tb.innerHTML = "";
+    USCANS.slice(0, 60).forEach((s, i) => {
+      const tr = document.createElement("tr");
+      if (s.result.cls === "err") tr.classList.add("bad");
+      const r = s.row || {};
+      tr.innerHTML = '<td class="rownum">' + (USCANS.length - i) + "</td>" +
+        "<td><b>" + esc(s.code) + "</b></td>" +
+        "<td>" + esc(s.item ? s.item.sku : (r["sku code"] || "")) + "</td>" +
+        "<td>" + esc(r["seller sku code"] || "") + "</td>" +
+        "<td>" + esc(r.size || "") + "</td>" +
+        "<td>" + esc(r.brand || "") + "</td>" +
+        '<td class="' + s.result.cls + '">' + esc(s.result.text) + "</td>";
+      tb.appendChild(tr);
+    });
+    $("uscanCount").textContent = USCANS.filter((s) => s.result.cls === "ok").length + " printed";
+    const last = USCANS[0];
+    $("uscanLast").innerHTML = last
+      ? '<div class="toast ' + (last.result.cls === "ok" ? "ok-toast" : "err") + '">' +
+        (last.result.cls === "ok" ? "✓ " : "✕ ") + esc(last.code) +
+        (last.row ? " · " + esc(last.row["seller sku code"]) + " · size " + esc(last.row.size) : "") +
+        " — " + esc(last.result.text) + "</div>"
+      : "";
+  }
+
+  $("uscanClear").addEventListener("click", () => { USCANS = []; renderUScans(); $("uscanInput").focus(); });
+  $("uscanForget").addEventListener("click", () => {
+    if (!confirm("Forget every item barcode and listing uploaded on this device?")) return;
+    window.LabelParse.clearExtras();
+    showUScanCard('<div class="toast warn">Uploaded data cleared — back to the built-in universe.</div>');
+  });
+  $("uscanInput").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const v = $("uscanInput").value;
+    $("uscanInput").value = "";
+    onUScan(v);
   });
 
   // ---------------------------------------------------------------------------

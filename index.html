@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=37">
+<link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
 
@@ -22,6 +22,7 @@
     <button class="modebtn" data-mode="rack">🗄️ Rack label · 25 × 15 mm</button>
     <button class="modebtn" data-mode="stn">📡 Myntra STN</button>
     <button class="modebtn" data-mode="find">🔍 Find a label</button>
+    <button class="modebtn" data-mode="scan">🎯 Scan &amp; print</button>
   </div>
 
   <!-- Manual finder -->
@@ -70,6 +71,11 @@
       <b>② SKU code</b> (e.g. <code>ANUKHeels97088318</code>)<br>
       <b>③ Seller SKU code</b> (e.g. <code>3221-Beige-36</code>) — a bare VAN covers every size, so include the size<br>
       Each match prints its label immediately in the size selected above. Connect the printer under <b>Direct printing</b> first.</div>
+    <div class="sub hidden" id="helpScan">Scan any item barcode and its product label prints straight away — <b>no file needed</b>.
+      Uploading is only for <b>teaching the app something new</b>, and whatever you upload is remembered in this browser:<br>
+      <b>Item-barcode export</b> (<code>item_barcode</code>, <code>sku_code</code>) — adds new <code>IB…</code> codes<br>
+      <b>Seller Listings Report</b> — adds SKUs that aren't in the built-in catalog yet<br>
+      Drop either one above; the type is detected automatically. If a scan fails, the message says which of the two to upload.</div>
     <div class="sub hidden" id="helpFind">No file needed — search the built-in catalog in the <b>Find a label</b> panel below.</div>
     <div id="prodSizeRow" style="margin:2px 0 12px;font-size:13px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
       <b>Label size:</b>
@@ -148,6 +154,28 @@
     <div style="margin-top:14px"><button class="btn primary" id="mapBtn">Apply mapping →</button></div>
   </section>
 
+  <!-- General scan station: no file required, uploads extend the universe -->
+  <section class="card hidden" id="uscanCard">
+    <h2>Scan &amp; print <span id="uscanBadge" class="pill ok"></span></h2>
+    <div class="sub">Click the box, then scan or type an item barcode, SKU code or seller SKU code.
+      Each match prints its label immediately in the size selected above.</div>
+    <div id="uscanState"></div>
+    <input id="uscanInput" placeholder="Scan item barcode · SKU code · seller SKU code"
+           autocomplete="off" spellcheck="false">
+    <div id="uscanLast"></div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="pill" id="uscanCount">0 printed</span>
+      <button class="btn ghost" id="uscanClear">Clear log</button>
+      <button class="btn ghost" id="uscanForget">Forget uploaded data</button>
+    </div>
+    <div class="tbl-wrap" style="margin-top:10px">
+      <table id="uscanTbl">
+        <thead><tr><th>#</th><th>Scanned</th><th>SKU</th><th>Seller SKU</th><th>Size</th><th>Brand</th><th>Result</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- STN scan station -->
   <section class="card hidden" id="scanCard">
     <h2>2 · Scan &amp; print <span id="scanBadge" class="pill ok"></span></h2>
@@ -212,15 +240,15 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=37"></script>
-<script src="assets/reference.enc.js?v=37"></script>
-<script src="assets/items.enc.js?v=37"></script>
-<script src="assets/parse.js?v=37"></script>
-<script src="assets/label.js?v=37"></script>
-<script src="assets/itemlabel.js?v=37"></script>
-<script src="assets/tsc.js?v=37"></script>
-<script src="assets/qz-cert.js?v=37"></script>
-<script src="assets/print.js?v=37"></script>
-<script src="assets/app.js?v=37"></script>
+<script src="assets/config.js?v=38"></script>
+<script src="assets/reference.enc.js?v=38"></script>
+<script src="assets/items.enc.js?v=38"></script>
+<script src="assets/parse.js?v=38"></script>
+<script src="assets/label.js?v=38"></script>
+<script src="assets/itemlabel.js?v=38"></script>
+<script src="assets/tsc.js?v=38"></script>
+<script src="assets/qz-cert.js?v=38"></script>
+<script src="assets/print.js?v=38"></script>
+<script src="assets/app.js?v=38"></script>
 </body>
 </html>

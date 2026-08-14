@@ -354,14 +354,108 @@
       return window.LABEL_ITEMS.meta;
     } catch (e) { return null; }
   }
+  // ---- extras: item barcodes and listings added by the team after the build ----
+  // The bundled map and catalog are a snapshot. Anything uploaded on the Scan &
+  // print tab is merged over them and kept in this browser, so a barcode or SKU
+  // only has to be supplied once.
+  const XITEMS_KEY = "labelStudioExtraItems_v1";
+  const XLIST_KEY  = "labelStudioExtraListings_v1";
+  const loadJSON = (k, dflt) => {
+    try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v || dflt; }
+    catch (e) { return dflt; }
+  };
+  let XITEMS = loadJSON(XITEMS_KEY, {});     // { "IB123": "SKU-CODE" }
+  let XLIST  = loadJSON(XLIST_KEY, []);      // [ {b,a,sn,si,sz,ss,sk,m,v}, … ]
+
+  function saveExtras() {
+    try {
+      localStorage.setItem(XITEMS_KEY, JSON.stringify(XITEMS));
+      localStorage.setItem(XLIST_KEY, JSON.stringify(XLIST));
+      return true;
+    } catch (e) { return false; }   // quota — caller reports it
+  }
+  function extrasMeta() {
+    return { items: Object.keys(XITEMS).length, listings: XLIST.length };
+  }
+  function clearExtras() { XITEMS = {}; XLIST = []; saveExtras(); }
+
   const itemsMeta = () => (window.LABEL_ITEMS ? window.LABEL_ITEMS.meta : null);
-  const findItem = (bc) => (window.LABEL_ITEMS ? window.LABEL_ITEMS.find(bc) : null);
+
+  // Uploaded barcodes win over the bundled map — they are newer by definition.
+  function findItem(bc) {
+    const raw = (bc || "").trim().toUpperCase();
+    if (XITEMS[raw]) return { itemCode: raw, sku: XITEMS[raw], name: "", from: "upload" };
+    const hit = window.LABEL_ITEMS ? window.LABEL_ITEMS.find(raw) : null;
+    return hit ? { ...hit, from: "built-in" } : null;
+  }
+
+  // Merge an OMS item-barcode export. Returns what changed.
+  async function addItemBarcodes(file) {
+    const { columns, rows } = await readFile(file);
+    const lut = buildLookup(columns);
+    const bcCol  = ["itembarcode", "item barcode", "item_barcode"].map((a) => lut[a]).find(Boolean);
+    const skuCol = ["sku code", "sku_code", "skucode"].map((a) => lut[a]).find(Boolean);
+    if (!bcCol || !skuCol) throw new Error("no item-barcode / sku-code columns in this file");
+    let added = 0, already = 0;
+    rows.forEach((r) => {
+      const bc = cleanCell(r[bcCol]).toUpperCase(), sku = cleanCell(r[skuCol]);
+      if (!bc || !sku) return;
+      if (XITEMS[bc] === sku || (findItem(bc) || {}).sku === sku) { already++; return; }
+      XITEMS[bc] = sku; added++;
+    });
+    const saved = saveExtras();
+    return { kind: "items", added, already, saved, total: Object.keys(XITEMS).length };
+  }
+
+  // Merge a Seller Listings Report so new SKUs resolve from now on.
+  async function addListings(file) {
+    const { columns, rows } = await readFile(file);
+    const lut = buildLookup(columns);
+    const pick = (names) => names.map((a) => lut[a]).find(Boolean);
+    const cols = {
+      b: pick(["brand"]), a: pick(["article type"]), sn: pick(["style name"]),
+      si: pick(["style id"]), sz: pick(["size"]),
+      ss: pick(["seller sku code", "seller sku"]), sk: pick(["sku code", "sku_code"]),
+      m: pick(["mrp"]), v: pick(["van", "vendor article no"]),
+    };
+    if (!cols.sk || !cols.ss) throw new Error("no seller sku code / sku code columns in this file");
+    let added = 0, already = 0;
+    rows.forEach((r) => {
+      const rec = {};
+      for (const k in cols) rec[k] = cols[k] ? cleanCell(r[cols[k]]) : "";
+      if (!rec.sk && !rec.ss) return;
+      // a listing that names itself carries no information — skip it
+      if (rec.sk && rec.ss.toLowerCase() === rec.sk.toLowerCase()) return;
+      if (rowFromReference(rec.sk) || rowFromReference(rec.ss)) { already++; return; }
+      XLIST.push(rec); added++;
+    });
+    const saved = saveExtras();
+    return { kind: "listings", added, already, saved, total: XLIST.length };
+  }
+
+  // Which kind of file is this? Used by the Scan & print uploader.
+  async function sniffUpload(file) {
+    const { columns } = await readFile(file);
+    const lut = buildLookup(columns);
+    const hasItem = ["itembarcode", "item barcode", "item_barcode"].some((a) => lut[a]);
+    const hasList = (lut["seller sku code"] || lut["seller sku"]) && (lut["sku code"] || lut["sku_code"]);
+    if (hasItem) return "items";
+    if (hasList) return "listings";
+    return null;
+  }
 
   // Build a complete label row straight from the listings reference. A SKU code
   // (the Myntra barcode) is unique per brand, so this needs no disambiguation.
   function rowFromReference(code) {
+    const key0 = (code || "").trim().toLowerCase();
+    const alt0 = key0.replace(/[\s_]+/g, "-");
+    for (const rec of XLIST) {
+      const ss = (rec.ss || "").toLowerCase(), sk = (rec.sk || "").toLowerCase();
+      const ssA = ss.replace(/[\s_]+/g, "-"), skA = sk.replace(/[\s_]+/g, "-");
+      if (ss === key0 || sk === key0 || ssA === alt0 || skA === alt0) return rowFromRecord(rec);
+    }
     const m = master(); if (!m) return null;
-    const key = (code || "").trim().toLowerCase();
+    const key = key0;
     // OMS writes `aedbh-0106-golden_36`, the listing `…-36` — same key, so try both.
     const alt = key.replace(/[\s_]+/g, "-");
     const tryKeys = alt === key ? [key] : [key, alt];
@@ -445,6 +539,7 @@
     buildMasterFromFiles, saveMaster, loadMasterFromStorage, clearMaster,
     unlockReference, tryAutoUnlock, hasEncrypted, forgetPassword,
     parseRack, itemsMeta, findItem, rowFromReference, searchReference,
+    addItemBarcodes, addListings, sniffUpload, extrasMeta, clearExtras,
     finalizeRows: finalize,
   };
 })();
