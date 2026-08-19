@@ -123,6 +123,19 @@
     return out;
   }
 
+  // Split a trailing size off a seller SKU: 7204-White/Sky Blue-38 -> base
+  // "7204-White/Sky Blue", size "38". Separator is - or _, and the number must
+  // look like a size (Myntra 1-12 or EU 30-48, half sizes allowed) so a code
+  // that merely ends in digits is left whole.
+  function splitSize(sku) {
+    const s = String(sku || "");
+    const m = s.match(/^(.*)[-_](\d{1,2}(?:\.5)?)$/);
+    if (!m) return { base: s, size: "" };
+    const n = parseFloat(m[2]);
+    const isSize = (n >= 1 && n <= 12) || (n >= 30 && n <= 48);
+    return isSize ? { base: m[1], size: m[2] } : { base: s, size: "" };
+  }
+
   // ---- 25 x 15 mm : small — code + item code + seller SKU ----
   function draw25x15(doc, rec, codeType) {
     const W = 25, H = 15, M = 1;
@@ -140,18 +153,52 @@
       let fs = 4.6; doc.setFontSize(fs);
       while (doc.getTextWidth(item) > rw && fs > 3.4) { fs -= 0.2; doc.setFontSize(fs); }
       doc.text(item, rx, 4.4);
-      // seller SKU: the readable one
+      // Size is pulled out of the SKU and set large: it was being lost off the
+      // end of the wrapped product code, which is the one thing the picker needs
+      // at a glance. The rest of the code keeps its own lines above it.
+      const { base, size } = splitSize(sku);
+      const sizeW = size ? 6.0 : 0;                 // room reserved bottom-right
       doc.setFont("helvetica", "bold");
-      let sf = 6.0; doc.setFontSize(sf);
-      while (wrapSku(doc, sku, rw).length > 2 && sf > 4.2) { sf -= 0.2; doc.setFontSize(sf); }
-      let y = 8.2;
-      wrapSku(doc, sku, rw).slice(0, 2).forEach((ln) => { doc.text(ln, rx, y); y += sf * 1.15 * 0.3528; });
+      let sf = 5.6; doc.setFontSize(sf);
+      while (wrapSku(doc, base, rw).length > 3 && sf > 3.8) { sf -= 0.2; doc.setFontSize(sf); }
+      let lines = wrapSku(doc, base, rw).slice(0, 3);
+      // the last line sits level with the size — shrink until it clears it
+      while (size && lines.length >= 3 &&
+             doc.getTextWidth(lines[2]) > rw - sizeW - 1 && sf > 3.8) {
+        sf -= 0.2; doc.setFontSize(sf);
+        lines = wrapSku(doc, base, rw).slice(0, 3);
+      }
+      let y = 7.2;
+      lines.forEach((ln) => { doc.text(ln, rx, y); y += sf * 1.15 * 0.3528; });
+
+      if (size) {
+        doc.setFont("helvetica", "bold");
+        let zf = 10.5; doc.setFontSize(zf);
+        while (doc.getTextWidth(size) > sizeW + 2.5 && zf > 6) { zf -= 0.3; doc.setFontSize(zf); }
+        doc.text(size, W - 0.6, H - 1.4, { align: "right" });
+        doc.setFont("helvetica", "normal"); doc.setFontSize(3.6);
+        doc.text("SIZE", W - 0.6 - doc.getTextWidth(size) * 0 - 0.2, H - 1.4 - zf * 0.30 * 0.3528 - 1.6,
+                 { align: "right" });
+      }
     } else {
       const side = 1, bw = W - 2 * side;
       if (item) { try { doc.addImage(window.LabelRender.barcodeDataURL(item), "PNG", side, 1.5, bw, 6.5); } catch (e) {} }
       doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.text(item, W / 2, 11.3, { align: "center" });
-      doc.setFont("helvetica", "normal"); doc.setFontSize(5.5);
-      doc.text(doc.splitTextToSize(sku, bw).slice(0, 1), W / 2, 14.2, { align: "center" });
+      // same split as the QR variant: the size was being cut off the wrapped code
+      const d1 = splitSize(sku);
+      if (d1.size) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+        const zw = doc.getTextWidth(d1.size);
+        doc.text(d1.size, W - side, 14.4, { align: "right" });
+        doc.setFont("helvetica", "normal");
+        let bf = 5.5; doc.setFontSize(bf);
+        const room = bw - zw - 1.6;
+        while (doc.getTextWidth(d1.base) > room && bf > 3.6) { bf -= 0.2; doc.setFontSize(bf); }
+        doc.text(d1.base, side, 14.2);
+      } else {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(5.5);
+        doc.text(doc.splitTextToSize(sku, bw).slice(0, 1), W / 2, 14.2, { align: "center" });
+      }
     }
   }
 
