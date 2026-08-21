@@ -10,19 +10,19 @@
   // bcPad = gap between the barcode and the SKU text printed under it.
   const SIZES = {
     "60x83": { w: 60, h: 83, m: 1.0, base: 1,    startY: 3.9, bcH: 11.5, bcPad: 5.7,
-               sizeCap: 9, sizeVal: 18, headW: 40, skuPt: 9, tag: "60 × 83 mm" },
+               sizeCap: 9, sizeVal: 18, headW: 36, ringW: 19, skuPt: 9, tag: "60 × 83 mm" },
     // 65x90 is the same shape as 60x83 (1.083 vs 1.084), so it is that layout
     // scaled up rather than a new one — every field, both addresses, and a 1D
     // barcode with more room than the 60x83 has (308um/module vs 284).
     "65x90": { w: 65, h: 90, m: 1.1, base: 1.08, startY: 4.2, bcH: 12.5, bcPad: 6.2,
-               sizeCap: 10, sizeVal: 19.5, headW: 43, skuPt: 10, tag: "65 × 90 mm" },
+               sizeCap: 10, sizeVal: 19.5, headW: 39, ringW: 20.5, skuPt: 10, tag: "65 × 90 mm" },
     // 30x60 stock, PORTRAIT and QR-only. A Code-128 of the full 16-18 char SKU
     // needs ~50mm of run, which is why this size was rotated while it carried
     // one; a QR of the same string is 25 modules square and fits the 30mm width
     // with room to spare, so the label stands upright again and the text keeps
     // the full 60mm of height.
     "30x60": { w: 30, h: 60, m: 0.8, base: 0.62, startY: 2.6, tag: "30 × 60 mm",
-               sizeCap: 7, sizeVal: 20, headW: 27, mrpScale: 1.35, sellerScale: 1.3,
+               sizeCap: 7, sizeVal: 20, headW: 27, ringW: 16.5, mrpScale: 1.35, sellerScale: 1.3,
                sizeLead: true, noMfg: true, noStyleName: true,
                qrOnly: true, qrSize: 16, qrPad: 1.2,
                maxFit: 3.0 },
@@ -64,6 +64,64 @@
   }
 
   function barcodeDataURL(value) { return barcodeCanvas(value).toDataURL("image/png"); }
+
+  // EU and UK sizes for a row. UK = EU - 33 across the range in use
+  // (EU 35 = UK 2 … EU 42 = UK 9). Either convention can turn up: the listing's
+  // size column is the UK/Myntra number, while the seller SKU carries EU — and
+  // some STN exports put EU in the size column instead. So classify whatever
+  // each field holds by its magnitude and derive the other.
+  const EU_UK_OFFSET = 33;
+  function euUk(row) {
+    const nums = [];
+    const sz = String(row.size == null ? "" : row.size).trim();
+    if (/^\d{1,2}(\.5)?$/.test(sz)) nums.push(parseFloat(sz));
+    const m = String(row["seller sku code"] || "").match(/[-_](\d{1,2}(?:\.5)?)$/);
+    if (m) nums.push(parseFloat(m[1]));
+    let eu = null, uk = null;
+    nums.forEach((n) => {
+      if (n >= 30 && n <= 48) { if (eu === null) eu = n; }
+      else if (n >= 1 && n <= 14) { if (uk === null) uk = n; }
+    });
+    if (eu === null && uk !== null) eu = uk + EU_UK_OFFSET;
+    if (uk === null && eu !== null) uk = eu - EU_UK_OFFSET;
+    const fmt = (v) => (v === null ? "" : String(v).replace(/\.0$/, ""));
+    return { eu: fmt(eu), uk: fmt(uk) };
+  }
+
+  // Size drawn the way Myntra's own footwear tags do it: two circled numbers,
+  // EU on the left and UK (zero-padded, "09") on the right, rings just
+  // overlapping and nothing else — no captions, as on the Myntra tag itself.
+  // `x0..x1` is the band it may use; returns the y below it.
+  // Pass draw=false to measure only.
+  function sizeRings(doc, row, x0, x1, yTop, draw) {
+    const { eu, uk } = euUk(row);
+    const vals = [];
+    if (eu) vals.push(eu);
+    if (uk) vals.push(uk.length < 2 ? "0" + uk : uk);
+    if (!vals.length) return yTop;
+    const OVER = 1.9;                             // centre spacing, in radii
+    const span = vals.length === 2 ? 2 + OVER : 2;
+    const r = (x1 - x0) / span;
+    const cy = yTop + r;
+    // Biggest type that still clears the ring: inside a circle the safe box is
+    // about 1.28r wide, and the cap must stay under ~1.05r.
+    let pt = (1.05 * r) / (0.717 * PT);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(pt);
+    const wid = Math.max.apply(null, vals.map((v) => doc.getTextWidth(v)));
+    if (wid > 1.28 * r) pt *= (1.28 * r) / wid;
+    const cap = pt * 0.717 * PT;
+    if (draw !== false) {
+      doc.setLineWidth(Math.max(0.28, r * 0.1));
+      doc.setFont("helvetica", "bold"); doc.setFontSize(pt);
+      vals.forEach((v, i) => {
+        const cx = x0 + r + i * OVER * r;
+        doc.circle(cx, cy, r, "S");
+        doc.text(v, cx, cy + cap / 2, { align: "center" });
+      });
+      doc.setLineWidth(0.2);
+    }
+    return cy + r;
+  }
 
   // What actually goes INTO the barcode on narrow stock: the trailing digits of
   // the SKU code, which are the Myntra sku id (verified a strict suffix on all
@@ -150,16 +208,9 @@
     // Narrow stock has no room for a top-right SIZE box beside the text, so the
     // size leads the flow instead — nothing can collide with it.
     if (SZ.sizeLead) {
-      const cap = SZ.sizeCap * s, val = SZ.sizeVal * s;
-      const baseline = y + val * PT;
-      if (draw) {
-        doc.setFont("helvetica", "bold"); doc.setFontSize(cap);
-        doc.text("SIZE", left, baseline);
-        const capW = doc.getTextWidth("SIZE ");
-        doc.setFontSize(val);
-        doc.text(String(g("size")), left + capW, baseline);
-      }
-      y = baseline + 8 * b * 1.15 * PT;      // clear the big digit's descender
+      const bw = Math.min(SZ.ringW, fullW);
+      const x0 = left + (fullW - bw) / 2;
+      y = sizeRings(doc, row, x0, x0 + bw, y, draw) + 1.4;
     }
 
     y = labelValue(doc, left, y, headW, 8 * b, "Brand:", g("brand"), draw);
@@ -231,10 +282,7 @@
     // at the head of the flow (see layoutContent).
     if (!SZ.sizeLead) {
       const rightEdge = SZ.w - SZ.m - 0.6;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(SZ.sizeCap); doc.text("SIZE", rightEdge, SZ.startY + 0.5, { align: "right" });
-      doc.setFontSize(SZ.sizeVal);
-      doc.text(String(g("size")), rightEdge, SZ.startY + SZ.sizeVal * PT * 1.15 + 1.0, { align: "right" });
+      sizeRings(doc, row, rightEdge - SZ.ringW, rightEdge, SZ.startY - 1.2, true);
     }
 
     if (!sku) return;
@@ -294,5 +342,5 @@
     return doc;
   }
 
-  window.LabelRender = { buildLabelDoc, buildLabelDocMulti, barcodeDataURL, useSize, sizeOf, specOf, sizeKeys };
+  window.LabelRender = { buildLabelDoc, buildLabelDocMulti, barcodeDataURL, useSize, sizeOf, specOf, sizeKeys, euUk };
 })();
