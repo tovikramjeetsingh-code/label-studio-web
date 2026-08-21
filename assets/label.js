@@ -90,19 +90,21 @@
 
   // Size drawn the way Myntra's own footwear tags do it: two circled numbers,
   // EU on the left and UK (zero-padded, "09") on the right, rings just
-  // overlapping and nothing else — no captions, as on the Myntra tag itself.
+  // overlapping under a single "SIZE" heading — no per-ring EU/UK captions.
   // `x0..x1` is the band it may use; returns the y below it.
   // Pass draw=false to measure only.
-  function sizeRings(doc, row, x0, x1, yTop, draw) {
+  function sizeRings(doc, row, x0, x1, yTop, capPt, draw) {
     const { eu, uk } = euUk(row);
     const vals = [];
     if (eu) vals.push(eu);
     if (uk) vals.push(uk.length < 2 ? "0" + uk : uk);
     if (!vals.length) return yTop;
+    // "SIZE" heads the block; the rings themselves carry no EU/UK captions.
+    const capH = capPt * PT * 1.05;
     const OVER = 1.9;                             // centre spacing, in radii
     const span = vals.length === 2 ? 2 + OVER : 2;
     const r = (x1 - x0) / span;
-    const cy = yTop + r;
+    const cy = yTop + capH + r;
     // Biggest type that still clears the ring: inside a circle the safe box is
     // about 1.28r wide, and the cap must stay under ~1.05r.
     let pt = (1.05 * r) / (0.717 * PT);
@@ -111,8 +113,10 @@
     if (wid > 1.28 * r) pt *= (1.28 * r) / wid;
     const cap = pt * 0.717 * PT;
     if (draw !== false) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(capPt);
+      doc.text("SIZE", (x0 + x1) / 2, yTop + capPt * PT * 0.78, { align: "center" });
       doc.setLineWidth(Math.max(0.28, r * 0.1));
-      doc.setFont("helvetica", "bold"); doc.setFontSize(pt);
+      doc.setFontSize(pt);
       vals.forEach((v, i) => {
         const cx = x0 + r + i * OVER * r;
         doc.circle(cx, cy, r, "S");
@@ -210,7 +214,7 @@
     if (SZ.sizeLead) {
       const bw = Math.min(SZ.ringW, fullW);
       const x0 = left + (fullW - bw) / 2;
-      y = sizeRings(doc, row, x0, x0 + bw, y, draw) + 1.4;
+      y = sizeRings(doc, row, x0, x0 + bw, y, SZ.sizeCap * 0.9, draw) + 1.4;
     }
 
     y = labelValue(doc, left, y, headW, 8 * b, "Brand:", g("brand"), draw);
@@ -282,7 +286,7 @@
     // at the head of the flow (see layoutContent).
     if (!SZ.sizeLead) {
       const rightEdge = SZ.w - SZ.m - 0.6;
-      sizeRings(doc, row, rightEdge - SZ.ringW, rightEdge, SZ.startY - 1.2, true);
+      sizeRings(doc, row, rightEdge - SZ.ringW, rightEdge, SZ.startY - 2.6, SZ.sizeCap * 0.9, true);
     }
 
     if (!sku) return;
