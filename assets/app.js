@@ -703,6 +703,8 @@
           (parseInt(inv.boxes, 10) || 1) + '" style="width:58px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px"></td>' +
         "<td><b>" + esc(inv.invoice || "—") + "</b></td>" +
         "<td><b>" + esc(inv.stn || "—") + "</b></td>" +
+        '<td><input class="boxPL" data-i="' + i + '" placeholder="type it in" value="' + esc(inv.packing || "") +
+          '" style="width:140px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px"></td>' +
         "<td>" + esc(inv.date || "") + "</td>" +
         "<td>" + esc(inv.qty || "") + "</td>" +
         "<td>" + esc(inv.type || "") + "</td>" +
@@ -710,6 +712,10 @@
         '<td class="src">' + esc(inv.src || "") + "</td>";
       tb.appendChild(tr);
     });
+    tb.querySelectorAll(".boxPL").forEach((el) => el.addEventListener("input", () => {
+      const inv = BOXES[parseInt(el.dataset.i, 10)];
+      if (inv) inv.packing = el.value.trim();
+    }));
     tb.querySelectorAll(".boxN").forEach((el) => el.addEventListener("change", () => {
       const inv = BOXES[parseInt(el.dataset.i, 10)];
       if (inv) { inv.boxes = Math.max(1, parseInt(el.value, 10) || 1); el.value = inv.boxes; }

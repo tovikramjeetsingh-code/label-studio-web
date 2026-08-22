@@ -60,6 +60,7 @@
       seller:    (lines.map((l) => l.text).find((t) => /Pvt\.?\s*Ltd|Private Limited/i.test(t)) || "").trim(),
       shipTo:    shipTo(lines),
       src:       file.name,
+      packing:   "",
       boxes:     1,
     };
     if (!inv.invoice && !inv.stn) throw new Error("no invoice number or STN found in this PDF");
@@ -76,10 +77,13 @@
     const x0 = head ? head.x - 4 : 0;
     const out = [];
     for (let k = i + 1; k < lines.length && out.length < 8; k++) {
-      if (/^S\.?\s*N\.?\b|Description of Goods/i.test(lines[k].text)) break;
+      if (/Description of Goods|HSN\s*\/\s*SAC|Grand\s*Total|Terms\s*&/i.test(lines[k].text)) break;
       const t = lines[k].items.filter((it) => it.x >= x0).map((it) => it.s)
         .join(" ").replace(/\s+/g, " ").trim();
-      if (t) out.push(t);
+      // a tax id is not an address, and the block ends with a stray "Rs."
+      if (!t || /GSTIN|UIN/i.test(t)) continue;
+      if (/^(Rs\.?|Amount|Code)$/i.test(t)) break;
+      out.push(t);
     }
     return out;
   }
@@ -144,6 +148,17 @@
     if (inv.invoice) y = numberBlock(doc, left, right, y, "INVOICE NO.", inv.invoice, 12.5) + 10;
     if (inv.stn) y = numberBlock(doc, left, right, y, "STN / STR NO.", inv.stn, 12.5) + 6;
 
+    // Typed on the tab, not on the invoice: the portal's packing list number.
+    if (inv.packing) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      doc.text("PACKING LIST NO.", left, y);
+      y += 9;
+      doc.setFont("helvetica", "bold");
+      fit(doc, inv.packing, full, 22, 9);
+      doc.text(inv.packing, left, y);
+      y += 6;
+    }
+
     // dispatch details
     doc.setLineWidth(0.4); doc.line(left, y, right, y);
     y += 5.5;
@@ -174,7 +189,12 @@
       const wrapped = [];
       inv.shipTo.forEach((l) => doc.splitTextToSize(l, full).forEach((w) => wrapped.push(w)));
       const room = Math.max(1, Math.floor((H - M - ty) / 3.7) + 1);
-      wrapped.slice(0, room).forEach((l) => { doc.text(l, left, ty); ty += 3.7; });
+      // Short of room, keep the name and the delivering end of the address
+      // (village / city / state) and drop the survey-number lines in between —
+      // those are the part a courier does not read.
+      const show = wrapped.length <= room ? wrapped
+        : [wrapped[0]].concat(wrapped.slice(wrapped.length - (room - 1)));
+      show.forEach((l) => { doc.text(l, left, ty); ty += 3.7; });
     }
   }
 
