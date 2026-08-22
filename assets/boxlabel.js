@@ -148,7 +148,6 @@
     doc.setLineWidth(0.4); doc.line(left, y, right, y);
     y += 5.5;
     const cells = [];
-    if (inv.qty) cells.push(["QTY", inv.qty + " units"]);
     if (inv.type) cells.push(["TYPE", inv.type]);
     if (inv.status) cells.push(["STATUS", inv.status]);
     const cw = full / Math.max(1, cells.length);
