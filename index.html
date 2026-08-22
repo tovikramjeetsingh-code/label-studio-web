@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=45">
+<link rel="stylesheet" href="style.css?v=46">
 </head>
 <body>
 
@@ -24,6 +24,7 @@
     <button class="modebtn" data-mode="find">🔍 Find a label</button>
     <button class="modebtn" data-mode="scan">🎯 Scan &amp; print</button>
     <button class="modebtn" data-mode="pick">📋 Picklist → 4 × 6</button>
+    <button class="modebtn" data-mode="box">📦 Box sticker</button>
   </div>
 
   <!-- Manual finder -->
@@ -81,6 +82,11 @@
       <b>4 × 6 inch</b> sticker listing <b>SKU · RACK · QTY</b> in the order the report gives them, which is already
       grouped by rack so the picker walks the aisle in order. Long picklists continue onto further stickers,
       <span id="pickPerPage">25</span> lines each. <b>QTY</b> is the report's <b>Good</b> column — it sums to the picklist total.</div>
+    <div class="sub hidden" id="helpBox">Upload the <b>tax invoice PDF</b> (one or several). Each becomes a
+      <b>4 × 6 inch</b> carton sticker carrying the <b>Invoice No.</b> and the <b>STN</b> — the invoice prints it
+      as <b>STR No.</b> — both in large type and as scannable barcodes, with the date, quantity, STN type/status
+      and the shipped-to address underneath. Set <b>Boxes</b> per invoice and each sticker is numbered
+      <b>BOX n / N</b>.</div>
     <div class="sub hidden" id="helpFind">No file needed — search the built-in catalog in the <b>Find a label</b> panel below.</div>
     <div id="prodSizeRow" style="margin:2px 0 12px;font-size:13px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
       <b>Label size:</b>
@@ -207,6 +213,31 @@
     </div>
   </section>
 
+  <!-- Invoice -> 4x6 box stickers -->
+  <section class="card hidden" id="boxCard">
+    <h2>Box sticker <span id="boxBadge" class="pill ok"></span></h2>
+    <div class="sub">Check what was read off the invoice, set how many boxes it ships in, then print or download.</div>
+    <div style="margin:2px 0 10px;font-size:12.5px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <b>Sticker size:</b>
+      W <input id="boxW" type="number" min="20" step="0.1" value="101.6" style="width:70px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px"> mm
+      H <input id="boxH" type="number" min="20" step="0.1" value="152.4" style="width:70px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px"> mm
+      <span>4 × 6 in = 101.6 × 152.4. This is the SIZE sent to the printer — match your stock.</span>
+    </div>
+    <div id="boxToast"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn ghost" id="boxPreview">Preview sticker</button>
+      <button class="btn primary" id="boxPrint">Print stickers</button>
+      <button class="btn ghost" id="boxZip">Download PDF</button>
+    </div>
+    <div class="tbl-wrap">
+      <table id="boxTbl">
+        <thead><tr><th>#</th><th>Boxes</th><th>Invoice No.</th><th>STN / STR No.</th><th>Dated</th>
+          <th>Qty</th><th>Type</th><th>Status</th><th>File</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- General scan station: no file required, uploads extend the universe -->
   <section class="card hidden" id="uscanCard">
     <h2>Scan &amp; print <span id="uscanBadge" class="pill ok"></span></h2>
@@ -293,16 +324,17 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=45"></script>
-<script src="assets/reference.enc.js?v=45"></script>
-<script src="assets/items.enc.js?v=45"></script>
-<script src="assets/parse.js?v=45"></script>
-<script src="assets/label.js?v=45"></script>
-<script src="assets/itemlabel.js?v=45"></script>
-<script src="assets/picklist.js?v=45"></script>
-<script src="assets/tsc.js?v=45"></script>
-<script src="assets/qz-cert.js?v=45"></script>
-<script src="assets/print.js?v=45"></script>
-<script src="assets/app.js?v=45"></script>
+<script src="assets/config.js?v=46"></script>
+<script src="assets/reference.enc.js?v=46"></script>
+<script src="assets/items.enc.js?v=46"></script>
+<script src="assets/parse.js?v=46"></script>
+<script src="assets/label.js?v=46"></script>
+<script src="assets/itemlabel.js?v=46"></script>
+<script src="assets/picklist.js?v=46"></script>
+<script src="assets/boxlabel.js?v=46"></script>
+<script src="assets/tsc.js?v=46"></script>
+<script src="assets/qz-cert.js?v=46"></script>
+<script src="assets/print.js?v=46"></script>
+<script src="assets/app.js?v=46"></script>
 </body>
 </html>

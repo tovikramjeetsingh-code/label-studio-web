@@ -50,14 +50,16 @@
     $("uscanCard").classList.toggle("hidden", mode !== "scan");
     $("helpPick").classList.toggle("hidden", mode !== "pick");
     $("pickCard").classList.toggle("hidden", mode !== "pick");
+    $("helpBox").classList.toggle("hidden", mode !== "box");
+    $("boxCard").classList.toggle("hidden", mode !== "box");
     $("findCard").classList.toggle("hidden", mode !== "find");
     $("drop").classList.toggle("hidden", mode === "find");     // finder needs no upload
     $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
     // Product stock applies wherever a product label is produced.
     $("prodSizeRow").classList.toggle("hidden",
-      mode === "item" || mode === "rack" || mode === "pick");
-    const wantsPdf = mode === "item" || mode === "pick";
+      mode === "item" || mode === "rack" || mode === "pick" || mode === "box");
+    const wantsPdf = mode === "item" || mode === "pick" || mode === "box";
     $("dropHint").textContent = (wantsPdf ? ".pdf" : ".csv · .xlsx") + " · multiple OK";
     $("fileInput").accept = wantsPdf ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
     $("fileInput").multiple = true;
@@ -71,6 +73,7 @@
     if (mode === "stn") { SCANS = []; renderScans(); showScanCard("no STN loaded"); }
     if (mode === "pick") { PICK = null; $("pickTbl").querySelector("tbody").innerHTML = "";
       $("pickToast").innerHTML = ""; $("pickBadge").textContent = "no picklist loaded"; }
+    if (mode === "box") { BOXES = []; renderBox(); $("boxToast").innerHTML = ""; }
     if (mode === "scan") { USCANS = []; renderUScans(); showUScanCard();
       setTimeout(() => $("uscanInput").focus(), 50); }
     if (mode === "find") { FIND_ROWS = []; $("findTbl").querySelector("tbody").innerHTML = "";
@@ -219,12 +222,29 @@
     }));
   })();
 
+  // Box-sticker stock, sent as the TSPL SIZE for that job.
+  const BOXSIZE_KEY = "labelStudioBoxSize_v1";
+  function boxSize() {
+    const w = parseFloat($("boxW").value) || window.BoxLabel.size.w;
+    const h = parseFloat($("boxH").value) || window.BoxLabel.size.h;
+    return { w, h };
+  }
+  (function () {
+    try {
+      const o = JSON.parse(localStorage.getItem(BOXSIZE_KEY) || "null");
+      if (o) { if (o.w) $("boxW").value = o.w; if (o.h) $("boxH").value = o.h; }
+    } catch (e) {}
+    ["boxW", "boxH"].forEach((id) => $(id).addEventListener("change", () => {
+      try { localStorage.setItem(BOXSIZE_KEY, JSON.stringify(boxSize())); } catch (e) {}
+    }));
+  })();
+
   // Show the exact setup the printer receives, so this is not a black box.
   function showJobDump(onlyIfOpen) {
     const pre = $("pDump");
     if (onlyIfOpen && pre.classList.contains("hidden")) return;
     applyPrinterSetup();
-    const size = MODE === "pick" ? pickSize() : labelSize();
+    const size = MODE === "pick" ? pickSize() : MODE === "box" ? boxSize() : labelSize();
     pre.textContent = window.TSCLabel.setupLines(size, window.TSCLabel.prod.gap)
       .replace(/\r\n/g, "\n") + "CLS\nBITMAP 0,0,…\nPRINT 1,1";
     pre.classList.remove("hidden");
@@ -409,6 +429,9 @@
 
     // Picklist tab: PDFs in, 4x6 stickers out.
     if (MODE === "pick") { await handlePicklists(files); return; }
+
+    // Box sticker tab: invoice PDFs in, 4x6 carton stickers out.
+    if (MODE === "box") { await handleInvoices(files); return; }
 
     // Scan & print: uploads teach the app, they do not make a batch.
     if (MODE === "scan") {
@@ -662,6 +685,98 @@
       $("pickToast").innerHTML = '<div class="toast ok-toast">✓ Sent to the printer.</div>';
     } catch (e) {
       $("pickToast").innerHTML = '<div class="toast err">✕ ' + esc(e.message) + "</div>";
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Box stickers. One tax invoice -> one sticker per carton, carrying the
+  // invoice number and the STN so a box can be tied back to its dispatch.
+  let BOXES = [];
+
+  function renderBox() {
+    const tb = $("boxTbl").querySelector("tbody");
+    tb.innerHTML = "";
+    BOXES.forEach((inv, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td class="rownum">' + (i + 1) + "</td>" +
+        '<td><input class="boxN" data-i="' + i + '" type="number" min="1" step="1" value="' +
+          (parseInt(inv.boxes, 10) || 1) + '" style="width:58px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px"></td>' +
+        "<td><b>" + esc(inv.invoice || "—") + "</b></td>" +
+        "<td><b>" + esc(inv.stn || "—") + "</b></td>" +
+        "<td>" + esc(inv.date || "") + "</td>" +
+        "<td>" + esc(inv.qty || "") + "</td>" +
+        "<td>" + esc(inv.type || "") + "</td>" +
+        "<td>" + esc(inv.status || "") + "</td>" +
+        '<td class="src">' + esc(inv.src || "") + "</td>";
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll(".boxN").forEach((el) => el.addEventListener("change", () => {
+      const inv = BOXES[parseInt(el.dataset.i, 10)];
+      if (inv) { inv.boxes = Math.max(1, parseInt(el.value, 10) || 1); el.value = inv.boxes; }
+      updateBoxBadge();
+    }));
+    updateBoxBadge();
+  }
+
+  function boxTotal() {
+    return BOXES.reduce((n, inv) => n + Math.max(1, parseInt(inv.boxes, 10) || 1), 0);
+  }
+  function updateBoxBadge() {
+    const n = boxTotal();
+    $("boxBadge").textContent = BOXES.length
+      ? BOXES.length + " invoice" + (BOXES.length > 1 ? "s" : "") + " · " + n + " sticker" + (n > 1 ? "s" : "")
+      : "no invoice loaded";
+  }
+
+  async function handleInvoices(files) {
+    const notes = [];
+    for (const f of files) {
+      try {
+        const inv = await window.BoxLabel.parseInvoice(f);
+        BOXES.push(inv);
+        const bits = [];
+        if (inv.invoice) bits.push("Invoice " + inv.invoice);
+        if (inv.stn) bits.push("STN " + inv.stn);
+        notes.push('<div class="toast ok-toast">✓ ' + esc(f.name) + " — " + esc(bits.join(" · ")) + ".</div>");
+        if (!inv.stn) notes.push('<div class="toast err">! ' + esc(f.name) +
+          " — no STN (STR No.) on this invoice; the sticker will show the invoice number only.</div>");
+      } catch (e) {
+        notes.push('<div class="toast err">✕ ' + esc(f.name) + ": " + esc(e.message) + "</div>");
+      }
+    }
+    resetDrop();
+    renderBox();
+    $("boxToast").innerHTML = notes.join("");
+  }
+
+  $("boxPreview").addEventListener("click", () => {
+    if (!BOXES.length) return;
+    const doc = window.BoxLabel.buildBoxDoc(BOXES, boxSize());
+    $("pvFrame").src = doc.output("bloburl");
+    $("modal").style.display = "flex";
+  });
+  $("boxZip").addEventListener("click", () => {
+    if (!BOXES.length) return;
+    const doc = window.BoxLabel.buildBoxDoc(BOXES, boxSize());
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(doc.output("blob"));
+    a.download = "box-" + ((BOXES[0].stn || BOXES[0].invoice || "4x6").replace(/[^A-Za-z0-9._-]+/g, "-")) + ".pdf";
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  $("boxPrint").addEventListener("click", async () => {
+    if (!BOXES.length) return;
+    if (!printConnected()) {
+      $("boxToast").innerHTML = '<div class="toast err">✕ Printer not connected — connect it under Direct printing.</div>';
+      return;
+    }
+    const pages = window.BoxLabel.buildBoxPages(BOXES, boxSize());
+    $("boxToast").innerHTML = '<div class="toast">Printing ' + pages.length + " sticker(s)…</div>";
+    try {
+      applyOffset(); applyPrinterSetup();
+      await printBitmaps(pages.map((d) => d), (d) => d, boxSize(), window.TSCLabel.prod.gap);
+      $("boxToast").innerHTML = '<div class="toast ok-toast">✓ Sent to the printer.</div>';
+    } catch (e) {
+      $("boxToast").innerHTML = '<div class="toast err">✕ ' + esc(e.message) + "</div>";
     }
   });
 
