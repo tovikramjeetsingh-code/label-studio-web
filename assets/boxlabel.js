@@ -3,8 +3,7 @@
 // invoice number and the STN (the invoice prints it as "STR No.") — big and
 // barcoded, with the dispatch details underneath.
 //
-// One sticker per box: set how many boxes the invoice ships in and each sticker
-// is numbered BOX n / N.
+// One sticker per box: the box count on the tab is how many copies print.
 (function () {
   const DEF = { w: 101.6, h: 152.4 };   // 4 x 6 inches
   const M = 5;
@@ -117,15 +116,13 @@
     return y + bcH;
   }
 
-  function drawBox(doc, inv, boxNo, boxCount, size) {
+  function drawBox(doc, inv, size) {
     const W = size.w, H = size.h;
     const left = M, right = W - M, full = right - left;
 
     let y = M + 5.5;
     doc.setFont("helvetica", "bold"); doc.setFontSize(11);
     doc.text("BOX LABEL", left, y);
-    doc.setFontSize(15);
-    doc.text("BOX " + boxNo + " / " + boxCount, right, y, { align: "right" });
     y += 2.5;
     doc.setDrawColor(0); doc.setLineWidth(0.6);
     doc.line(left, y, right, y);
@@ -191,7 +188,7 @@
       const n = Math.max(1, parseInt(inv.boxes, 10) || 1);
       for (let b = 1; b <= n; b++) {
         const doc = new jsPDF({ unit: "mm", format: [s.w, s.h], orientation: "portrait", compress: true });
-        drawBox(doc, inv, b, n, s);
+        drawBox(doc, inv, s);
         out.push(doc);
       }
     });
@@ -207,7 +204,7 @@
       for (let b = 1; b <= n; b++) {
         if (!doc) doc = new jsPDF({ unit: "mm", format: [s.w, s.h], orientation: "portrait", compress: true });
         else doc.addPage([s.w, s.h], "portrait");
-        drawBox(doc, inv, b, n, s);
+        drawBox(doc, inv, s);
       }
     });
     return doc;
