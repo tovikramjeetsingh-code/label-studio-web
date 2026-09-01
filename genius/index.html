@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#26282b">
+<title>Choose your Genius plan</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💡</text></svg>">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+
+<div class="phone">
+
+  <header class="appbar">
+    <button class="back" id="back" aria-label="Go back">
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path d="M20 12H4M4 12l7-7M4 12l7 7" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <h1>Choose your Genius plan</h1>
+  </header>
+
+  <main id="scroller">
+
+    <section class="plans" aria-label="Plans">
+      <div class="plan-row" id="planRow" role="radiogroup" aria-label="Genius plans"></div>
+      <p class="tagline"><span class="bulb">💡</span><span id="tagline"></span></p>
+    </section>
+
+    <section class="features" id="features" aria-label="What you get"></section>
+
+    <section class="consent-wrap">
+      <div class="consent-head">We need your confirmation to proceed</div>
+      <div class="consent-card" id="consentCard">
+        <label class="consent">
+          <input type="checkbox" id="consent" checked>
+          <span class="box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="15" height="15">
+              <path d="M4 12.5l5.2 5.2L20 7" fill="none" stroke="#fff"
+                    stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="consent-text">I consent to enter into the
+            <a href="#" id="agreement">Investment Advisory agreement</a>
+            with ET Money Genius and get access to the plan I have selected.</span>
+        </label>
+      </div>
+    </section>
+
+    <div class="pay-spacer" id="paySpacer"></div>
+  </main>
+
+  <footer class="paybar" id="paybar">
+    <div class="offer-pill"><span class="muted">Special offer</span> <b>Ending soon</b></div>
+    <p class="price-line">
+      <s id="payMrp"></s> <em id="payPrice"></em> p.m. for the next 12 months
+    </p>
+    <p class="price-note">
+      Then <span id="payThen"></span> p.m. or 0.05% p.m. on Genius advised investments,
+      whichever is higher <a href="#" id="seeHow">See how?</a>
+    </p>
+    <button class="proceed" id="proceed">Proceed</button>
+    <p class="fineprint">Billed quarterly <i>•</i> Cancel anytime <i>•</i> GST as applicable</p>
+  </footer>
+
+  <div class="sheet-scrim" id="scrim" hidden></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+    <div class="grabber"></div>
+    <h2 id="sheetTitle"></h2>
+    <div id="sheetBody"></div>
+    <button class="sheet-close" id="sheetClose">Got it</button>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script src="app.js?v=1"></script>
+</body>
+</html>
