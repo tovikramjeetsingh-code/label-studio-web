@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+
+<header>
+  <h1>📈 Portfolio</h1>
+  <span>Mutual funds &amp; stocks · CAS import · XIRR</span>
+  <span class="priv">🔒 Runs in your browser — data never leaves this device</span>
+</header>
+
+<main>
+  <div class="modebar" id="tabs">
+    <button class="modebtn active" data-tab="overview">Overview</button>
+    <button class="modebtn" data-tab="holdings">Holdings</button>
+    <button class="modebtn" data-tab="txns">Transactions</button>
+    <button class="modebtn" data-tab="import">Import CAS</button>
+    <button class="modebtn" data-tab="backup">Backup</button>
+    <button class="btn ghost refresh" id="refreshBtn">↻ Refresh prices</button>
+  </div>
+
+  <div class="notice hidden" id="notice"></div>
+
+  <!-- ============ OVERVIEW ============ -->
+  <section class="tabpane" id="tab-overview">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h2>Value over time</h2>
+      <div class="sub" id="chartSub">One point is recorded each day you open this page with prices available.</div>
+      <div id="chart"></div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h2>Allocation</h2>
+        <div class="sub">Share of current value.</div>
+        <div id="allocation"></div>
+      </div>
+      <div class="card">
+        <h2>Movers</h2>
+        <div class="sub">Biggest unrealised gain and loss, by rupees.</div>
+        <div id="movers"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HOLDINGS ============ -->
+  <section class="tabpane hidden" id="tab-holdings">
+    <div class="card">
+      <h2>Holdings <span class="pill" id="holdCount"></span></h2>
+      <div class="sub">Click a row for transactions, a manual price, or to link the scheme used for NAV.</div>
+      <div class="scroll-x"><table class="grid" id="holdTable"></table></div>
+    </div>
+    <div class="card">
+      <h2>Add a holding by hand</h2>
+      <div class="sub">For anything the statement missed — an unlisted folio, or a stock you track manually.</div>
+      <form class="form-row" id="addHoldingForm">
+        <label>Type
+          <select name="kind">
+            <option value="mf">Mutual fund</option>
+            <option value="stock">Stock / ETF</option>
+          </select>
+        </label>
+        <label class="grow">Name
+          <input name="name" placeholder="HDFC Flexi Cap Fund - Direct Growth" required>
+        </label>
+        <label>Symbol / ISIN
+          <input name="isin" placeholder="RELIANCE or INF179K01YV8">
+        </label>
+        <label>Folio
+          <input name="folio" placeholder="optional">
+        </label>
+        <button class="btn primary" type="submit">Add</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ TRANSACTIONS ============ -->
+  <section class="tabpane hidden" id="tab-txns">
+    <div class="card">
+      <h2>Record a transaction</h2>
+      <div class="sub">Units and amount are enough — NAV is worked out if you leave it blank.</div>
+      <form class="form-row" id="addTxnForm">
+        <label class="grow">Holding
+          <select name="holdingId" id="txnHolding" required></select>
+        </label>
+        <label>Date <input type="date" name="date" required></label>
+        <label>Type
+          <select name="type">
+            <option value="buy">Buy / SIP</option>
+            <option value="sell">Sell / redeem</option>
+            <option value="income">Dividend / IDCW payout</option>
+          </select>
+        </label>
+        <label>Units <input name="units" type="number" step="any" min="0" placeholder="8.605"></label>
+        <label>Amount ₹ <input name="amount" type="number" step="any" min="0" placeholder="10000" required></label>
+        <label>NAV / price <input name="nav" type="number" step="any" min="0" placeholder="auto"></label>
+        <button class="btn primary" type="submit">Add</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>All transactions <span class="pill" id="txnCount"></span></h2>
+      <div class="sub">
+        <label class="inline">Filter
+          <select id="txnFilter"><option value="">Everything</option></select>
+        </label>
+      </div>
+      <div class="scroll-x"><table class="grid" id="txnTable"></table></div>
+    </div>
+  </section>
+
+  <!-- ============ IMPORT ============ -->
+  <section class="tabpane hidden" id="tab-import">
+    <div class="card">
+      <h2>Import a Consolidated Account Statement</h2>
+      <div class="sub">
+        A <b>CAMS / KFintech</b> CAS brings in every mutual fund transaction, so cost and XIRR are exact.
+        An <b>NSDL / CDSL</b> CAS is a holdings snapshot — quantities come in, but you supply the average
+        buy price, because the statement does not carry one. The file is read in this browser.
+      </div>
+      <div id="drop">
+        <div class="big">Drop the CAS PDF here, or click to choose</div>
+        <div class="small">Nothing is uploaded — pdf.js reads it locally</div>
+      </div>
+      <input type="file" id="fileInput" accept="application/pdf,.pdf">
+      <div class="pw-row hidden" id="pwRow">
+        <label class="grow">This CAS is password protected
+          <input type="password" id="pwInput" placeholder="Statement password (usually your PAN)" autocomplete="off">
+        </label>
+        <button class="btn primary" id="pwBtn">Open</button>
+      </div>
+      <div id="importStatus"></div>
+    </div>
+
+    <div class="card hidden" id="reviewCard">
+      <h2>Review before saving <span class="pill" id="reviewCount"></span></h2>
+      <div class="sub">
+        Everything the parser found, editable. Untick anything you do not want. Rows marked
+        <b>needs cost</b> came from a demat snapshot — enter what you paid on average, or leave it
+        blank to import at the statement price (P&amp;L then starts at zero).
+      </div>
+      <div class="scroll-x"><table class="grid" id="reviewTable"></table></div>
+      <div class="actions">
+        <button class="btn primary" id="commitBtn">Save to portfolio</button>
+        <button class="btn ghost" id="cancelImport">Discard</button>
+        <button class="btn ghost" id="rawBtn">Show extracted text</button>
+      </div>
+      <pre class="raw hidden" id="rawText"></pre>
+    </div>
+  </section>
+
+  <!-- ============ BACKUP ============ -->
+  <section class="tabpane hidden" id="tab-backup">
+    <div class="card">
+      <h2>Backup</h2>
+      <div class="sub">
+        Everything lives in this browser's local storage. Clearing site data wipes it, and another
+        device sees nothing — so export a file you keep somewhere safe.
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="exportBtn">Export portfolio JSON</button>
+        <button class="btn ghost" id="importJsonBtn">Import a backup</button>
+        <input type="file" id="jsonInput" accept="application/json,.json">
+      </div>
+      <div class="sub" id="storageInfo"></div>
+    </div>
+    <div class="card">
+      <h2>Prices</h2>
+      <div class="sub">
+        Mutual fund NAV comes from the public AMFI mirror at mfapi.in. Stock quotes are attempted
+        against Yahoo Finance, which is unofficial and may refuse the request — when it does, type
+        the price on the holding and pin it.
+      </div>
+      <label class="inline"><input type="checkbox" id="autoPrices"> Fetch prices automatically when this page opens</label>
+      <div class="sub" id="priceStatus"></div>
+    </div>
+    <div class="card danger">
+      <h2>Reset</h2>
+      <div class="sub">Deletes every holding, transaction and snapshot in this browser. Export first.</div>
+      <button class="btn danger" id="resetBtn">Erase this portfolio</button>
+    </div>
+  </section>
+</main>
+
+<script src="../vendor/pdf.min.js"></script>
+<script src="calc.js?v=1"></script>
+<script src="cas.js?v=1"></script>
+<script src="store.js?v=1"></script>
+<script src="prices.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
