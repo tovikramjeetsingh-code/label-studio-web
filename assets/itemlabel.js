@@ -21,15 +21,47 @@
       .filter(Boolean);
   }
 
+  // A Myntra item-barcode page carries the item code, the seller SKU, a colour
+  // and a SIZE box. Some templates put the size in the SKU tail (Kia-Gib-Beige-38);
+  // others end the SKU at a dash (Cor-S-9011-) and print the size in its own
+  // "SIZE / 37" box. Pull the size out either way and complete the SKU so it
+  // reads Cor-S-9011-37 — then the existing splitSize() shows it big on the label.
   function recordFromLines(lines) {
     if (!lines.length) return null;
     const itemIdx = Math.max(0, lines.findIndex((l) => /^IB\w*\d/i.test(l)));
     const item = lines[itemIdx];
-    const rest = lines.filter((_, i) => i !== itemIdx);
+    let rest = lines.filter((_, i) => i !== itemIdx);
+
+    // find an explicit size: "SIZE 37" / "SIZE: 37" inline, or a lone number
+    // sitting near a standalone "SIZE" label.
+    let size = "";
+    const joined = rest.join(" ");
+    const inline = joined.match(/\bSIZE\b[:\s]*([0-9]{1,2}(?:\.5)?)\b/i);
+    if (inline) size = inline[1];
+    else if (/\bSIZE\b/i.test(joined)) {
+      const lone = rest.find((l) => /^[0-9]{1,2}(?:\.5)?$/.test(l.trim()));
+      if (lone) size = lone.trim();
+    }
+    // strip the SIZE label + its value out of the remaining lines
+    rest = rest
+      .map((l) => l.replace(/\bSIZE\b[:\s]*([0-9]{1,2}(?:\.5)?)?/ig, " ").replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .filter((l) => !(size && l === size));
+
+    // the SKU is the line that looks like a code (letters + digits + a dash)
+    let skuIdx = rest.findIndex((l) => /[-_]/.test(l) && /[A-Za-z]/.test(l) && /\d/.test(l));
+    if (skuIdx < 0) skuIdx = 0;
+    let sku = rest[skuIdx] || "";
+    const desc = rest.filter((_, i) => i !== skuIdx).join(" ").trim();
+    // complete the SKU with the boxed size so downstream splitSize() can show it
+    if (size) {
+      if (/[-_]$/.test(sku)) sku = sku + size;          // Cor-S-9011- -> Cor-S-9011-37
+      else if (!splitSize(sku).size) sku = sku + "-" + size;
+    }
     return {
       "item code": item || "",
-      "seller sku code": rest[0] || "",
-      "description": rest.slice(1).join(" ") || "",
+      "seller sku code": sku,
+      "description": desc,
       _filename: (item || "item").replace(/[\\/:*?"<>|]/g, "_"),
     };
   }
