@@ -457,14 +457,29 @@
     const d = new Date();
     return d.toLocaleString("en-US", { month: "short" }) + "-" + String(d.getFullYear()).slice(-2);
   }
+  // Candidate seller SKUs to look up. The Myntra barcode PDF prints the SKU base,
+  // the colour and the size in separate boxes, so a full seller SKU is
+  // base-COLOUR-size (e.g. Cor-S-9011-Cream-37) even though the SKU box alone reads
+  // Cor-S-9011-37. Try the colour-inclusive form too so it matches the catalog.
+  function grnCandidates(rec) {
+    const list = [];
+    if (rec.sku) list.push(rec.sku);
+    const ss = (rec.ss || "").trim();
+    if (ss) {
+      list.push(ss);
+      const sp = ss.match(/^(.*)[-_](\d{1,2}(?:\.5)?)$/);
+      const color = (rec.color || "").trim();
+      if (sp && color) list.push(sp[1] + "-" + color + "-" + sp[2]);
+    }
+    return list;
+  }
   // Resolve one record to a full product row, carrying the item code for the QR.
   // Catalog first; if it can't (a brand-new SKU) but the sheet carries the product
   // fields itself, build the row straight from the sheet so it still prints.
   function resolveGrnRow(rec) {
     const item = (rec.item || "").trim();
     let row = null;
-    if (rec.sku) row = window.LabelParse.rowFromReference(rec.sku);
-    if (!row && rec.ss) row = window.LabelParse.rowFromReference(rec.ss);
+    for (const key of grnCandidates(rec)) { row = window.LabelParse.rowFromReference(key); if (row) break; }
     if (!row && item) {
       const hit = window.LabelParse.findItem(item);
       if (hit && hit.sku) row = window.LabelParse.rowFromReference(hit.sku);
@@ -517,7 +532,7 @@
           if (/\.pdf$/i.test(f.name)) {
             const recs = await window.ItemLabel.parsePDF(f);
             recs.forEach((rc) => {
-              const row = resolveGrnRow({ item: rc["item code"], sku: "", ss: rc["seller sku code"] });
+              const row = resolveGrnRow({ item: rc["item code"], sku: "", ss: rc["seller sku code"], color: rc["description"] });
               if (row) rows.push(row); else misses.push(rc["item code"] || rc["seller sku code"] || "?");
             });
           } else {
