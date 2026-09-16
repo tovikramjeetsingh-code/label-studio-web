@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=51">
+<link rel="stylesheet" href="style.css?v=52">
 </head>
 <body>
 
@@ -25,6 +25,7 @@
     <button class="modebtn" data-mode="scan">🎯 Scan &amp; print</button>
     <button class="modebtn" data-mode="pick">📋 Picklist → 4 × 6</button>
     <button class="modebtn" data-mode="box">📦 Box sticker</button>
+    <button class="modebtn" data-mode="grn">🧾 GRN label · 60 × 83 mm</button>
   </div>
 
   <!-- Manual finder -->
@@ -87,6 +88,14 @@
       as <b>STR No.</b> — both in large type and as scannable barcodes, with the date, STN type/status
       and the shipped-to address underneath. <b>Boxes</b> is how many copies print for that invoice. The <b>packing list number</b> is not on the invoice — type it in after upload and it prints under the STN.</div>
     <div class="sub hidden" id="helpFind">No file needed — search the built-in catalog in the <b>Find a label</b> panel below.</div>
+    <div class="sub hidden" id="helpGrn">Turn <b>item codes</b> into the full <b>60 × 83 mm product label</b> — brand, style, MRP,
+      addresses, the dual <b>EU / UK size</b> and the bottom SKU barcode — with the <b>item code added as a QR</b> and text,
+      exactly like the GRN app. Upload either:<br>
+      <b>① An Excel / CSV of item codes</b> (a column of <code>IB…</code> codes; a <code>SKU code</code> or
+      <code>Seller SKU</code> column is used if present)<br>
+      <b>② The Myntra barcode PDF(s)</b> — item code + seller SKU per page<br>
+      Everything else is filled from the built-in catalog. If an item code isn't known yet, add it once in
+      <b>Scan &amp; print</b> (item-barcode export), or include its SKU column in the file.</div>
     <div id="prodSizeRow" style="margin:2px 0 12px;font-size:13px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
       <b>Label size:</b>
       <label style="cursor:pointer"><input type="radio" name="prodSize" value="60x83" checked> 60 × 83 mm</label>
@@ -323,17 +332,17 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=51"></script>
-<script src="assets/reference.enc.js?v=51"></script>
-<script src="assets/items.enc.js?v=51"></script>
-<script src="assets/parse.js?v=51"></script>
-<script src="assets/label.js?v=51"></script>
-<script src="assets/itemlabel.js?v=51"></script>
-<script src="assets/picklist.js?v=51"></script>
-<script src="assets/boxlabel.js?v=51"></script>
-<script src="assets/tsc.js?v=51"></script>
-<script src="assets/qz-cert.js?v=51"></script>
-<script src="assets/print.js?v=51"></script>
-<script src="assets/app.js?v=51"></script>
+<script src="assets/config.js?v=52"></script>
+<script src="assets/reference.enc.js?v=52"></script>
+<script src="assets/items.enc.js?v=52"></script>
+<script src="assets/parse.js?v=52"></script>
+<script src="assets/label.js?v=52"></script>
+<script src="assets/itemlabel.js?v=52"></script>
+<script src="assets/picklist.js?v=52"></script>
+<script src="assets/boxlabel.js?v=52"></script>
+<script src="assets/tsc.js?v=52"></script>
+<script src="assets/qz-cert.js?v=52"></script>
+<script src="assets/print.js?v=52"></script>
+<script src="assets/app.js?v=52"></script>
 </body>
 </html>

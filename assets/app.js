@@ -20,12 +20,14 @@
   // Product-label stock — shared by the Product, Myntra STN and Find tabs.
   function prodSizeKey() { return radioVal("prodSize", localStorage.getItem(PRODSIZE_KEY) || "60x83"); }
 
+  // GRN tab always prints the 60x83 product label (with an item-code QR added).
+  const prodSize = () => MODE === "grn" ? "60x83" : prodSizeKey();
   const buildOne = (r) => MODE === "item" ? window.ItemLabel.buildItemDoc(r, itemCodeType(), itemSizeKey())
                         : MODE === "rack" ? window.ItemLabel.buildRackDoc(r, itemCodeType())
-                        : window.LabelRender.buildLabelDoc(r, prodSizeKey());
+                        : window.LabelRender.buildLabelDoc(r, prodSize());
   const labelSize = () => MODE === "item" ? window.ItemLabel.sizeOf(itemSizeKey())
                         : MODE === "rack" ? { w: 25, h: 15 }
-                        : window.LabelRender.sizeOf(prodSizeKey());
+                        : window.LabelRender.sizeOf(prodSize());
 
   // restore + persist the item-code type and size choices
   (function () {
@@ -52,16 +54,19 @@
     $("pickCard").classList.toggle("hidden", mode !== "pick");
     $("helpBox").classList.toggle("hidden", mode !== "box");
     $("boxCard").classList.toggle("hidden", mode !== "box");
+    $("helpGrn").classList.toggle("hidden", mode !== "grn");
     $("findCard").classList.toggle("hidden", mode !== "find");
     $("drop").classList.toggle("hidden", mode === "find");     // finder needs no upload
     $("codeTypeRow").classList.toggle("hidden", mode !== "item" && mode !== "rack");
     $("itemSizeRow").classList.toggle("hidden", mode !== "item");
     // Product stock applies wherever a product label is produced.
     $("prodSizeRow").classList.toggle("hidden",
-      mode === "item" || mode === "rack" || mode === "pick" || mode === "box");
+      mode === "item" || mode === "rack" || mode === "pick" || mode === "box" || mode === "grn");
     const wantsPdf = mode === "item" || mode === "pick" || mode === "box";
-    $("dropHint").textContent = (wantsPdf ? ".pdf" : ".csv · .xlsx") + " · multiple OK";
-    $("fileInput").accept = wantsPdf ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
+    const bothGrn = mode === "grn";   // GRN accepts either the barcode PDF or an item-code Excel
+    $("dropHint").textContent = (bothGrn ? ".pdf · .csv · .xlsx" : (wantsPdf ? ".pdf" : ".csv · .xlsx")) + " · multiple OK";
+    $("fileInput").accept = bothGrn ? ".pdf,application/pdf,.csv,.xlsx,.xls,.xlsm"
+                          : wantsPdf ? ".pdf,application/pdf" : ".csv,.xlsx,.xls,.xlsm";
     $("fileInput").multiple = true;
     ROWS = [];
     $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
@@ -351,7 +356,7 @@
       return;
     }
     // product label — 60x83 runs single-up, 30x60 runs 3-up on its own roll
-    const sz = prodSizeKey();
+    const sz = prodSize();
     if (window.TSCLabel.rolls[sz]) {
       const expanded = [];
       rows.forEach((r) => { for (let n = rowQty(r); n > 0; n--) expanded.push(r); });
@@ -399,6 +404,82 @@
     $("mapCard").classList.add("hidden"); $("reviewCard").classList.add("hidden"); $("genCard").classList.add("hidden");
   }
 
+  // ---- GRN label: item codes -> full product label + item-code QR ----
+  // Read a CSV/Excel to an array of row objects (first sheet, header row).
+  function readSheet(file) {
+    return new Promise((resolve, reject) => {
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("could not read " + file.name));
+      if (ext === "csv" || ext === "txt") {
+        reader.onload = () => resolve(Papa.parse(reader.result, { header: true, skipEmptyLines: true }).data);
+        reader.readAsText(file);
+      } else {
+        reader.onload = () => {
+          const wb = XLSX.read(new Uint8Array(reader.result), { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          resolve(XLSX.utils.sheet_to_json(ws, { defval: "" }));
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    });
+  }
+  // Extract {item, sku, ss} records from an item-code sheet. If no header matches,
+  // the first column is taken as the item codes.
+  async function readGrnRecords(file) {
+    const rows = await readSheet(file);
+    if (!rows.length) return [];
+    const headers = Object.keys(rows[0]);
+    const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const col = (aliases) => headers.find((h) => aliases.includes(norm(h)));
+    const itemCol = col(["itembarcode", "itemcode", "item", "barcode", "itembarcodeid"]);
+    const skuCol = col(["skucode", "skuid"]);
+    const ssCol = col(["sellerskucode", "sellersku", "vendorarticleno", "van"]);
+    // optional product columns — used only as a fallback when the catalog can't resolve
+    const c = {
+      brand: col(["brand"]), at: col(["articletype", "article"]), sn: col(["stylename"]),
+      si: col(["styleid", "styleidno"]), mrp: col(["mrp", "price"]), size: col(["size"]),
+    };
+    const cc = window.LabelParse.cleanCell;
+    const recs = [];
+    rows.forEach((r) => {
+      const item = itemCol ? r[itemCol] : (!skuCol && !ssCol ? r[headers[0]] : "");
+      const rec = {
+        item: cc(item), sku: cc(skuCol ? r[skuCol] : ""), ss: cc(ssCol ? r[ssCol] : ""),
+        brand: cc(c.brand ? r[c.brand] : ""), at: cc(c.at ? r[c.at] : ""), sn: cc(c.sn ? r[c.sn] : ""),
+        si: cc(c.si ? r[c.si] : ""), mrp: cc(c.mrp ? r[c.mrp] : ""), size: cc(c.size ? r[c.size] : ""),
+      };
+      if (rec.item || rec.sku || rec.ss) recs.push(rec);
+    });
+    return recs;
+  }
+  function monthYear() {
+    const d = new Date();
+    return d.toLocaleString("en-US", { month: "short" }) + "-" + String(d.getFullYear()).slice(-2);
+  }
+  // Resolve one record to a full product row, carrying the item code for the QR.
+  // Catalog first; if it can't (a brand-new SKU) but the sheet carries the product
+  // fields itself, build the row straight from the sheet so it still prints.
+  function resolveGrnRow(rec) {
+    const item = (rec.item || "").trim();
+    let row = null;
+    if (rec.sku) row = window.LabelParse.rowFromReference(rec.sku);
+    if (!row && rec.ss) row = window.LabelParse.rowFromReference(rec.ss);
+    if (!row && item) {
+      const hit = window.LabelParse.findItem(item);
+      if (hit && hit.sku) row = window.LabelParse.rowFromReference(hit.sku);
+    }
+    if (!row && (rec.brand || rec.mrp)) {   // full-export fallback (no catalog match)
+      row = {
+        "brand": rec.brand, "article type": rec.at, "style name": rec.sn, "style id": rec.si,
+        "seller sku code": rec.ss, "sku code": rec.sku || rec.ss, "size": rec.size, "mrp": rec.mrp,
+        "month & year of manufacture": monthYear(),
+      };
+    }
+    if (row) { row._item = item.toUpperCase(); row._qty = 1; }
+    return row;
+  }
+
   async function handleFiles(fileList) {
     const files = Array.from(fileList);
     if (!files.length) return;
@@ -424,6 +505,39 @@
       resetDrop();
       ROWS = all;
       renderReview(label, "Rack", [], 0);
+      return;
+    }
+
+    // GRN label: item codes (Excel) OR the Myntra barcode PDF -> full product
+    // label + item-code QR. Everything but the item code is filled from the catalog.
+    if (MODE === "grn") {
+      const rows = [], misses = [];
+      for (const f of files) {
+        try {
+          if (/\.pdf$/i.test(f.name)) {
+            const recs = await window.ItemLabel.parsePDF(f);
+            recs.forEach((rc) => {
+              const row = resolveGrnRow({ item: rc["item code"], sku: "", ss: rc["seller sku code"] });
+              if (row) rows.push(row); else misses.push(rc["item code"] || rc["seller sku code"] || "?");
+            });
+          } else {
+            const recs = await readGrnRecords(f);
+            recs.forEach((rc) => {
+              const row = resolveGrnRow(rc);
+              if (row) rows.push(row); else misses.push(rc.item || rc.sku || rc.ss || "?");
+            });
+          }
+        } catch (e) { uploadErr(e, f.name); return; }
+      }
+      resetDrop();
+      if (!rows.length) {
+        uploadErr(new Error("Couldn't match any item codes to products" +
+          (misses.length ? " (unknown: " + misses.slice(0, 8).join(", ") + ")" : "") +
+          ". Add the item-barcode export once in Scan & print, or include a SKU / Seller SKU column."));
+        return;
+      }
+      ROWS = rows;
+      renderReview(label, "Item → product", [], 0, { grnMisses: misses });
       return;
     }
 
@@ -1141,6 +1255,12 @@
     }
     if (enriched) notes.push('<div class="toast ok-toast">🔎 ' + enriched +
       " row(s) completed / corrected from the stored listings (size kept from your file).</div>");
+    if (batch && batch.grnMisses && batch.grnMisses.length) {
+      notes.push('<div class="toast warn">⚠ ' + batch.grnMisses.length +
+        " item code(s) weren't in the catalog and were left out: " +
+        esc(batch.grnMisses.slice(0, 8).join(", ")) + (batch.grnMisses.length > 8 ? " …" : "") +
+        ". Add them via Scan &amp; print, or include a SKU / Seller SKU column.</div>");
+    }
     if (problems && problems.length) {
       const list = problems.slice(0, 8).map((p) => (p.file ? p.file + " " : "") +
         "row " + p.row + " (missing: " + p.missing.join(", ") + ")").join("; ");
@@ -1175,7 +1295,9 @@
       });
     } else {
       const multi = ROWS.some((r) => r._src) && new Set(ROWS.map((r) => r._src)).size > 1;
+      const isGrn = MODE === "grn";
       thead.innerHTML = "<tr><th>#</th><th></th><th>Copies</th>" + (multi ? "<th>File</th>" : "") +
+        (isGrn ? "<th>Item Code</th>" : "") +
         "<th>Seller SKU</th><th>SKU Code (barcode)</th><th>Size</th>" +
         "<th>MRP</th><th>Brand</th><th>Article Type</th><th>Style Name</th><th>Style ID</th><th>Month &amp; Year</th></tr>";
       const req = ["seller sku code", "sku code", "size", "mrp"];
@@ -1186,6 +1308,7 @@
           '<td class="rownum">' + (i + 1) + "</td>" + actionCell(i) +
           '<td><input class="qty" type="number" min="1" value="' + (r._qty || 1) + '" data-i="' + i + '" style="width:52px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px"></td>' +
           (multi ? '<td class="src">' + esc(r._src || "") + "</td>" : "") +
+          (isGrn ? "<td><b>" + esc(r._item || "") + "</b></td>" : "") +
           "<td><b>" + esc(r["seller sku code"]) + "</b></td>" +
           "<td>" + esc(r["sku code"]) + "</td><td>" + esc(r.size) + "</td>" +
           "<td>₹" + esc(r.mrp) + "</td><td>" + esc(r.brand) + "</td>" +

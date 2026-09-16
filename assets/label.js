@@ -286,7 +286,18 @@
     // at the head of the flow (see layoutContent).
     if (!SZ.sizeLead) {
       const rightEdge = SZ.w - SZ.m - 0.6;
-      sizeRings(doc, row, rightEdge - SZ.ringW, rightEdge, SZ.startY - 2.6, SZ.sizeCap * 0.9, true);
+      const ringsBottom = sizeRings(doc, row, rightEdge - SZ.ringW, rightEdge, SZ.startY - 2.6, SZ.sizeCap * 0.9, true);
+      // GRN / item label: the item code as a scannable QR with its number, tucked
+      // under the size rings on the right. Drawn only when the row carries one, so
+      // ordinary product labels are unaffected.
+      const itemCode = String(row._item || "");
+      if (itemCode) {
+        const qr = SZ.itemQr || 13.5;
+        const qx = rightEdge - qr, qy = ringsBottom + 1.8;
+        try { doc.addImage(window.ItemLabel.qrDataURL(itemCode), "PNG", qx, qy, qr, qr); } catch (e) {}
+        doc.setFont("helvetica", "normal"); doc.setFontSize(SZ.itemPt || 6.3);
+        doc.text(itemCode, rightEdge, qy + qr + 2.3, { align: "right" });
+      }
     }
 
     if (!sku) return;
