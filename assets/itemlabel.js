@@ -173,44 +173,49 @@
     const W = 25, H = 15, M = 1;
     const item = String(rec["item code"] || ""), sku = String(rec["seller sku code"] || "");
     if (codeType === "qr") {
-      // QR on the left, item code + seller SKU on the right. The QR is trimmed
-      // a little (still 3.4 dots per module at 203dpi, comfortably scannable) to
-      // widen the text column, and the SKU is set larger than the item code —
-      // the SKU is what a person reads, the item code is what gets scanned.
+      // QR on the left; item code + seller SKU + colour on the right, with the
+      // size set large in the bottom-right corner. The QR is trimmed a little
+      // (still 3.4 dots/module at 203dpi, comfortably scannable) to widen the
+      // text column. The SKU is what a person reads; the item code is scanned.
       const qrSize = 10.5, qrX = 0.5, qrY = (H - qrSize) / 2;
       if (item) { try { doc.addImage(qrDataURL(item), "PNG", qrX, qrY, qrSize, qrSize); } catch (e) {} }
       const rx = qrX + qrSize + 0.8, rw = W - 0.6 - rx;
-      // item code: smaller, still shrinks further if a long one would clip
-      doc.setFont("helvetica", "normal");
-      let fs = 4.6; doc.setFontSize(fs);
-      while (doc.getTextWidth(item) > rw && fs > 3.4) { fs -= 0.2; doc.setFontSize(fs); }
-      doc.text(item, rx, 4.4);
-      // Size is pulled out of the SKU and set large: it was being lost off the
-      // end of the wrapped product code, which is the one thing the picker needs
-      // at a glance. The rest of the code keeps its own lines above it.
+      const desc = String(rec["description"] || "");
       const { base, size } = splitSize(sku);
-      const sizeW = size ? 6.0 : 0;                 // room reserved bottom-right
-      doc.setFont("helvetica", "bold");
-      let sf = 5.6; doc.setFontSize(sf);
-      while (wrapSku(doc, base, rw).length > 3 && sf > 3.8) { sf -= 0.2; doc.setFontSize(sf); }
-      let lines = wrapSku(doc, base, rw).slice(0, 3);
-      // the last line sits level with the size — shrink until it clears it
-      while (size && lines.length >= 3 &&
-             doc.getTextWidth(lines[2]) > rw - sizeW - 1 && sf > 3.8) {
-        sf -= 0.2; doc.setFontSize(sf);
-        lines = wrapSku(doc, base, rw).slice(0, 3);
-      }
-      let y = 7.2;
-      lines.forEach((ln) => { doc.text(ln, rx, y); y += sf * 1.15 * 0.3528; });
+      const sizeW = size ? 5.8 : 0;                 // room reserved bottom-right
 
+      // item code (small) at the top — it's scanned via the QR, so keep it compact
+      doc.setFont("helvetica", "normal");
+      let fs = 4.2; doc.setFontSize(fs);
+      while (doc.getTextWidth(item) > rw && fs > 3.2) { fs -= 0.2; doc.setFontSize(fs); }
+      doc.text(item, rx, 3.1);
+
+      // seller SKU (bold, prominent) — at most 2 lines to leave room for colour
+      doc.setFont("helvetica", "bold");
+      let sf = 5.4; doc.setFontSize(sf);
+      while (wrapSku(doc, base, rw).length > 2 && sf > 3.8) { sf -= 0.2; doc.setFontSize(sf); }
+      const lines = wrapSku(doc, base, rw).slice(0, 2);
+      let y = 6.1;
+      const lh = sf * 1.15 * 0.3528;
+      lines.forEach((ln) => { doc.text(ln, rx, y); y += lh; });
+
+      // colour / description (normal, small) under the SKU, clear of the size box
+      if (desc) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(4.2);
+        const cw = Math.max(rw - sizeW - 0.4, 4);
+        const cl = doc.splitTextToSize(desc, cw).slice(0, 1);
+        doc.text(cl, rx, Math.min(y + 0.4, H - 1.5));
+      }
+
+      // size (big) bottom-right corner
       if (size) {
         doc.setFont("helvetica", "bold");
         let zf = 10.5; doc.setFontSize(zf);
         while (doc.getTextWidth(size) > sizeW + 2.5 && zf > 6) { zf -= 0.3; doc.setFontSize(zf); }
         doc.text(size, W - 0.6, H - 1.4, { align: "right" });
         doc.setFont("helvetica", "normal"); doc.setFontSize(3.6);
-        doc.text("SIZE", W - 0.6 - doc.getTextWidth(size) * 0 - 0.2, H - 1.4 - zf * 0.30 * 0.3528 - 1.6,
-                 { align: "right" });
+        doc.text("SIZE", W - 0.8, H - 1.4 - zf * 0.30 * 0.3528 - 1.6, { align: "right" });
       }
     } else {
       const side = 1, bw = W - 2 * side;
