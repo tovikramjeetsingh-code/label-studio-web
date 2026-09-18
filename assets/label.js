@@ -72,16 +72,22 @@
   // each field holds by its magnitude and derive the other.
   const EU_UK_OFFSET = 33;
   function euUk(row) {
-    const nums = [];
-    const sz = String(row.size == null ? "" : row.size).trim();
-    if (/^\d{1,2}(\.5)?$/.test(sz)) nums.push(parseFloat(sz));
-    const m = String(row["seller sku code"] || "").match(/[-_](\d{1,2}(?:\.5)?)$/);
-    if (m) nums.push(parseFloat(m[1]));
+    // The seller SKU's own size is authoritative — the sticker must match what the
+    // warehouse picks and scans. Classify the SKU's trailing number (30-48 = EU,
+    // 1-14 = UK) and derive the other side from it. The listing "size" column only
+    // fills a side the SKU leaves empty; it never overrides the SKU. So a SKU whose
+    // size differs from Myntra's listing size (e.g. LC-03-White-8, listing size 7)
+    // still prints its own number (8) rather than the listing's.
     let eu = null, uk = null;
-    nums.forEach((n) => {
+    const classify = (n) => {
+      if (n == null || isNaN(n)) return;
       if (n >= 30 && n <= 48) { if (eu === null) eu = n; }
       else if (n >= 1 && n <= 14) { if (uk === null) uk = n; }
-    });
+    };
+    const m = String(row["seller sku code"] || "").match(/[-_](\d{1,2}(?:\.5)?)$/);
+    classify(m ? parseFloat(m[1]) : null);          // seller SKU first — it wins
+    const sz = String(row.size == null ? "" : row.size).trim();
+    if (/^\d{1,2}(\.5)?$/.test(sz)) classify(parseFloat(sz));   // then fill from the size column
     if (eu === null && uk !== null) eu = uk + EU_UK_OFFSET;
     if (uk === null && eu !== null) uk = eu - EU_UK_OFFSET;
     const fmt = (v) => (v === null ? "" : String(v).replace(/\.0$/, ""));
