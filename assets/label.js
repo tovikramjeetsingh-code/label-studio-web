@@ -30,8 +30,13 @@
     // Same product-label layout as 60x83; narrower (50mm) so the fonts ease down
     // a touch and the label:value / ring columns tuck in, with the extra height
     // giving the 1D barcode more room.
-    "50x100": { w: 50, h: 100, m: 1.0, base: 0.9, startY: 4.5, bcH: 14, bcPad: 8,
-                sizeCap: 9, sizeVal: 18, headW: 29, ringW: 16, skuPt: 10, tag: "50 × 100 mm" },
+    // 100x50 LANDSCAPE roll (the vendor's "50x100" = 100mm wide x 50mm tall).
+    // A wide, short label: the single-column flow can't fit the field set in 50mm,
+    // so this uses a two-column layout (identity left, MRP + addresses right, SIZE
+    // rings top-right) with a full-width 1D barcode across the bottom.
+    "50x100": { w: 100, h: 50, m: 1.5, base: 1, startY: 4.4, bcH: 9, bcPad: 3.5, bcFull: true,
+                sizeCap: 9, sizeVal: 16, ringW: 17, skuPt: 9, wide: true, maxFit: 1.3,
+                tag: "100 × 50 mm" },
   };
   let SZ = SIZES["60x83"];              // current size spec
 
@@ -269,7 +274,76 @@
     return cy;
   }
 
+  // Two-column layout for WIDE landscape stock (e.g. 100x50). Identity fields in
+  // the left column, MRP + both addresses in the right, SIZE rings in the
+  // top-right corner. Returns the lower of the two columns' bottom y.
+  function layoutWide(doc, row, s, draw) {
+    const b = SZ.base * s;
+    const M = SZ.m, leftX = M + 0.6, rEdge = SZ.w - M - 0.6;
+    const colGap = 4;
+    const colW = (rEdge - leftX - colGap) / 2;
+    const rightX = leftX + colW + colGap;
+    const g = (k) => (row[k] == null ? "" : row[k]);
+
+    // SIZE rings, top-right corner
+    const ringW = Math.min(SZ.ringW, colW);
+    const ringsBottom = sizeRings(doc, row, rEdge - ringW, rEdge, SZ.startY - 1.6, SZ.sizeCap * 0.9, draw);
+
+    // LEFT column — product identity
+    let y = SZ.startY;
+    y = labelValue(doc, leftX, y, colW, 8 * b, "Brand:", g("brand"), draw);
+    y = labelValue(doc, leftX, y, colW, 8 * b, "Article Type:", g("article type"), draw);
+    y = labelValue(doc, leftX, y, colW, 8 * b, "Style Name:", g("style name"), draw);
+    y = labelValue(doc, leftX, y, colW, 8 * b, "Style ID:", g("style id"), draw);
+    y = labelValue(doc, leftX, y, colW, 8 * b, "Month & Year:", g("month & year of manufacture"), draw);
+    y = labelValue(doc, leftX, y, colW, 8 * b, "Country of Origin:", C.COUNTRY_OF_ORIGIN, draw);
+    y = labelValue(doc, leftX, y, colW, 8 * b, "Seller SKU:", g("seller sku code"), draw);
+    const leftBottom = y;
+
+    // RIGHT column — MRP at top (clears the far-right rings), then both addresses
+    let ry = SZ.startY;
+    if (draw) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9 * b);
+      doc.text("MRP:", rightX, ry);
+      let mx = rightX + doc.getTextWidth("MRP: ");
+      const valSize = 13 * b, rp = rupeeImage(), rpH = valSize * PT * 1.02, rpW = rpH * rp.ratio;
+      doc.addImage(rp.url, "PNG", mx, ry - rpH * 0.82, rpW, rpH);
+      mx += rpW + 0.3;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(valSize); doc.text(String(g("mrp")), mx, ry);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6 * b);
+      doc.text("(Incl. of all Taxes)", rightX, ry + 2.4 * b);
+    }
+    ry = Math.max(ry + 6.4 * b, ringsBottom + 1.0);
+    ry = wrapped(doc, rightX, ry, colW, 7.5 * b, "bold", "Designed & Marketed By:", 0, draw) + 0.5 * b;
+    ry = wrapped(doc, rightX, ry, colW, 5 * b, "normal", C.DESIGNED_BY, 0, draw) + 1.4 * b;
+    ry = wrapped(doc, rightX, ry, colW, 7.5 * b, "bold", "Manufactured & Packed By:", 0, draw) + 0.5 * b;
+    ry = wrapped(doc, rightX, ry, colW, 5 * b, "normal", C.MANUFACTURED_BY, 0, draw);
+    return Math.max(leftBottom, ry);
+  }
+
+  function drawLabelWide(doc, row) {
+    const g = (k) => (row[k] == null ? "" : row[k]);
+    const sku = String(g("sku code"));
+    const BC_TOP = SZ.h - SZ.m - SZ.bcPad - SZ.bcH;
+    const avail = BC_TOP - SZ.startY - 0.6;
+    const fits = (k) => layoutWide(doc, row, k, false) - SZ.startY <= avail;
+    const top = SZ.maxFit || 1;
+    let s = top;
+    if (!fits(top)) {
+      let lo = 0.4, hi = top;
+      for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
+      s = lo;
+    }
+    layoutWide(doc, row, s, true);
+    if (!sku) return;
+    const bx = SZ.m, bw = SZ.w - 2 * SZ.m;
+    try { doc.addImage(barcodeDataURL(sku), "PNG", bx, BC_TOP, bw, SZ.bcH); } catch (e) {}
+    doc.setFont("helvetica", "bold"); doc.setFontSize(SZ.skuPt);
+    doc.text(sku, SZ.w / 2, SZ.h - SZ.m - 1.0, { align: "center" });
+  }
+
   function drawLabel(doc, row) {
+    if (SZ.wide) return drawLabelWide(doc, row);
     const g = (k) => (row[k] == null ? "" : row[k]);
     const sku = String(g("sku code"));
     const BC_TOP = barTop();
