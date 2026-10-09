@@ -34,8 +34,8 @@
     // A wide, short label: the single-column flow can't fit the field set in 50mm,
     // so this uses a two-column layout (identity left, MRP + addresses right, SIZE
     // rings top-right) with a full-width 1D barcode across the bottom.
-    "50x100": { w: 100, h: 50, m: 1.5, base: 1, startY: 4.4, bcH: 9, bcPad: 3.5, bcFull: true,
-                sizeCap: 9, sizeVal: 16, ringW: 17, skuPt: 9, wide: true, maxFit: 1.3,
+    "50x100": { w: 100, h: 50, m: 1.5, base: 1, startY: 4.6, bcH: 9, bcPad: 3.5, bcFull: true,
+                sizeCap: 9, sizeVal: 16, ringW: 17, skuPt: 9, wide: true, maxFit: 1.9,
                 tag: "100 × 50 mm" },
   };
   let SZ = SIZES["60x83"];              // current size spec
@@ -274,70 +274,70 @@
     return cy;
   }
 
-  // Two-column layout for WIDE landscape stock (e.g. 100x50). Identity fields in
-  // the left column, MRP + both addresses in the right, SIZE rings in the
-  // top-right corner. Returns the lower of the two columns' bottom y.
-  function layoutWide(doc, row, s, draw) {
-    const b = SZ.base * s;
-    const M = SZ.m, leftX = M + 0.6, rEdge = SZ.w - M - 0.6;
-    const colGap = 4;
+  // WIDE landscape stock (e.g. 100x50): two columns, and each column is sized to
+  // fill its OWN height so neither side is left with blank space — identity left,
+  // MRP + both addresses right, SIZE rings top-right, full-width barcode bottom.
+  function wideGeom() {
+    const M = SZ.m, leftX = M + 0.6, rEdge = SZ.w - M - 0.6, colGap = 4;
     const colW = (rEdge - leftX - colGap) / 2;
-    const rightX = leftX + colW + colGap;
-    const g = (k) => (row[k] == null ? "" : row[k]);
-
-    // SIZE rings, top-right corner
-    const ringW = Math.min(SZ.ringW, colW);
-    const ringsBottom = sizeRings(doc, row, rEdge - ringW, rEdge, SZ.startY - 1.6, SZ.sizeCap * 0.9, draw);
-
-    // LEFT column — product identity
+    return { M, leftX, rEdge, colGap, colW, rightX: leftX + colW + colGap };
+  }
+  function wideLeft(doc, row, s, draw) {
+    const b = SZ.base * s, G = wideGeom(), g = (k) => (row[k] == null ? "" : row[k]);
     let y = SZ.startY;
-    y = labelValue(doc, leftX, y, colW, 8 * b, "Brand:", g("brand"), draw);
-    y = labelValue(doc, leftX, y, colW, 8 * b, "Article Type:", g("article type"), draw);
-    y = labelValue(doc, leftX, y, colW, 8 * b, "Style Name:", g("style name"), draw);
-    y = labelValue(doc, leftX, y, colW, 8 * b, "Style ID:", g("style id"), draw);
-    y = labelValue(doc, leftX, y, colW, 8 * b, "Month & Year:", g("month & year of manufacture"), draw);
-    y = labelValue(doc, leftX, y, colW, 8 * b, "Country of Origin:", C.COUNTRY_OF_ORIGIN, draw);
-    y = labelValue(doc, leftX, y, colW, 8 * b, "Seller SKU:", g("seller sku code"), draw);
-    const leftBottom = y;
-
-    // RIGHT column — MRP at top (clears the far-right rings), then both addresses
+    y = labelValue(doc, G.leftX, y, G.colW, 8 * b, "Brand:", g("brand"), draw);
+    y = labelValue(doc, G.leftX, y, G.colW, 8 * b, "Article Type:", g("article type"), draw);
+    y = labelValue(doc, G.leftX, y, G.colW, 8 * b, "Style Name:", g("style name"), draw);
+    y = labelValue(doc, G.leftX, y, G.colW, 8 * b, "Style ID:", g("style id"), draw);
+    y = labelValue(doc, G.leftX, y, G.colW, 8 * b, "Month & Year:", g("month & year of manufacture"), draw);
+    y = labelValue(doc, G.leftX, y, G.colW, 8 * b, "Country of Origin:", C.COUNTRY_OF_ORIGIN, draw);
+    y = labelValue(doc, G.leftX, y, G.colW, 8 * b, "Seller SKU:", g("seller sku code"), draw);
+    return y;
+  }
+  function wideRight(doc, row, s, draw, ringsBottom) {
+    const b = SZ.base * s, G = wideGeom(), g = (k) => (row[k] == null ? "" : row[k]);
     let ry = SZ.startY;
+    // MRP — large and prominent (clears the far-right rings)
     if (draw) {
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9 * b);
-      doc.text("MRP:", rightX, ry);
-      let mx = rightX + doc.getTextWidth("MRP: ");
-      const valSize = 13 * b, rp = rupeeImage(), rpH = valSize * PT * 1.02, rpW = rpH * rp.ratio;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(11 * b);
+      doc.text("MRP:", G.rightX, ry);
+      let mx = G.rightX + doc.getTextWidth("MRP: ");
+      const valSize = 18 * b, rp = rupeeImage(), rpH = valSize * PT * 1.02, rpW = rpH * rp.ratio;
       doc.addImage(rp.url, "PNG", mx, ry - rpH * 0.82, rpW, rpH);
-      mx += rpW + 0.3;
+      mx += rpW + 0.4;
       doc.setFont("helvetica", "bold"); doc.setFontSize(valSize); doc.text(String(g("mrp")), mx, ry);
       doc.setFont("helvetica", "normal"); doc.setFontSize(6 * b);
-      doc.text("(Incl. of all Taxes)", rightX, ry + 2.4 * b);
+      doc.text("(Incl. of all Taxes)", G.rightX, ry + 2.7 * b);
     }
-    ry = Math.max(ry + 6.4 * b, ringsBottom + 1.0);
-    ry = wrapped(doc, rightX, ry, colW, 7.5 * b, "bold", "Designed & Marketed By:", 0, draw) + 0.5 * b;
-    ry = wrapped(doc, rightX, ry, colW, 5 * b, "normal", C.DESIGNED_BY, 0, draw) + 1.4 * b;
-    ry = wrapped(doc, rightX, ry, colW, 7.5 * b, "bold", "Manufactured & Packed By:", 0, draw) + 0.5 * b;
-    ry = wrapped(doc, rightX, ry, colW, 5 * b, "normal", C.MANUFACTURED_BY, 0, draw);
-    return Math.max(leftBottom, ry);
+    ry = Math.max(ry + 8.0 * b, ringsBottom + 1.2);
+    ry = wrapped(doc, G.rightX, ry, G.colW, 7.5 * b, "bold", "Designed & Marketed By:", 0, draw) + 0.5 * b;
+    ry = wrapped(doc, G.rightX, ry, G.colW, 5 * b, "normal", C.DESIGNED_BY, 0, draw) + 1.6 * b;
+    ry = wrapped(doc, G.rightX, ry, G.colW, 7.5 * b, "bold", "Manufactured & Packed By:", 0, draw) + 0.5 * b;
+    ry = wrapped(doc, G.rightX, ry, G.colW, 5 * b, "normal", C.MANUFACTURED_BY, 0, draw);
+    return ry;
   }
-
   function drawLabelWide(doc, row) {
     const g = (k) => (row[k] == null ? "" : row[k]);
-    const sku = String(g("sku code"));
+    const sku = String(g("sku code")), G = wideGeom();
     const BC_TOP = SZ.h - SZ.m - SZ.bcPad - SZ.bcH;
     const avail = BC_TOP - SZ.startY - 0.6;
-    const fits = (k) => layoutWide(doc, row, k, false) - SZ.startY <= avail;
-    const top = SZ.maxFit || 1;
-    let s = top;
-    if (!fits(top)) {
-      let lo = 0.4, hi = top;
-      for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
-      s = lo;
-    }
-    layoutWide(doc, row, s, true);
+    const ringW = Math.min(SZ.ringW, G.colW);
+    const ringsBottom = sizeRings(doc, row, G.rEdge - ringW, G.rEdge, SZ.startY - 1.6, SZ.sizeCap * 0.9, false);
+    const cap = SZ.maxFit || 1.6;
+    // largest scale whose column still clears the barcode — fills each side
+    const fit = (fn) => {
+      if (fn(cap)) return cap;
+      let lo = 0.5, hi = cap;
+      for (let i = 0; i < 16; i++) { const m = (lo + hi) / 2; if (fn(m)) lo = m; else hi = m; }
+      return lo;
+    };
+    const sL = fit((k) => wideLeft(doc, row, k, false) - SZ.startY <= avail);
+    const sR = fit((k) => wideRight(doc, row, k, false, ringsBottom) - SZ.startY <= avail);
+    sizeRings(doc, row, G.rEdge - ringW, G.rEdge, SZ.startY - 1.6, SZ.sizeCap * 0.9, true);
+    wideLeft(doc, row, sL, true);
+    wideRight(doc, row, sR, true, ringsBottom);
     if (!sku) return;
-    const bx = SZ.m, bw = SZ.w - 2 * SZ.m;
-    try { doc.addImage(barcodeDataURL(sku), "PNG", bx, BC_TOP, bw, SZ.bcH); } catch (e) {}
+    try { doc.addImage(barcodeDataURL(sku), "PNG", SZ.m, BC_TOP, SZ.w - 2 * SZ.m, SZ.bcH); } catch (e) {}
     doc.setFont("helvetica", "bold"); doc.setFontSize(SZ.skuPt);
     doc.text(sku, SZ.w / 2, SZ.h - SZ.m - 1.0, { align: "center" });
   }
