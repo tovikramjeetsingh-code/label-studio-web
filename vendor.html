@@ -11,7 +11,7 @@
 
 <header>
   <h1>🏷️ Label Studio · Vendor</h1>
-  <span>Search a SKU and print its 60 × 83 mm product label</span>
+  <span>Search a SKU and print its product label — 60 × 83 or 50 × 100 mm</span>
   <span class="priv">🔒 Runs in your browser — nothing is uploaded</span>
 </header>
 
@@ -40,6 +40,11 @@
       <button class="btn primary" id="qbtn">Search</button>
       <button class="btn ghost hidden" id="printAllBtn" disabled title="Connect a printer first">🖨 Print all</button>
       <button class="btn ghost hidden" id="zipBtn">⬇ Download ZIP</button>
+    </div>
+    <div style="margin:10px 0 2px;font-size:13px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <b>Sticker size:</b>
+      <label style="cursor:pointer"><input type="radio" name="vsize" value="60x83" checked> 60 × 83 mm</label>
+      <label style="cursor:pointer"><input type="radio" name="vsize" value="50x100"> 50 × 100 mm</label>
     </div>
     <div id="toast"></div>
     <div class="tbl-wrap" style="margin-top:10px">
@@ -91,6 +96,6 @@
 <script src="assets/tsc.js"></script>
 <script src="assets/qz-cert.js"></script>
 <script src="assets/print.js"></script>
-<script src="assets/vendor.js?v=1"></script>
+<script src="assets/vendor.js?v=2"></script>
 </body>
 </html>

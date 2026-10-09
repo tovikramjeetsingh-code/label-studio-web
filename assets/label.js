@@ -26,6 +26,12 @@
                sizeLead: true, noMfg: true, noStyleName: true,
                qrOnly: true, qrSize: 16, qrPad: 1.2,
                maxFit: 3.0 },
+    // 50x100 — taller portrait roll the vendor prints on (vendor portal only).
+    // Same product-label layout as 60x83; narrower (50mm) so the fonts ease down
+    // a touch and the label:value / ring columns tuck in, with the extra height
+    // giving the 1D barcode more room.
+    "50x100": { w: 50, h: 100, m: 1.0, base: 0.9, startY: 4.5, bcH: 14, bcPad: 8,
+                sizeCap: 9, sizeVal: 18, headW: 29, ringW: 16, skuPt: 10, tag: "50 × 100 mm" },
   };
   let SZ = SIZES["60x83"];              // current size spec
 

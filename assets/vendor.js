@@ -5,9 +5,11 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const SIZE = "60x83";
   const PASS_KEY = "labelStudioVendorPass_v1";
   const OFF_KEY = "labelStudioOffset_v1";
+  const VSIZE_KEY = "labelStudioVendorSize_v1";
+  // the sticker size the vendor picked (60x83 default, or the 50x100 roll)
+  const vsize = () => (document.querySelector('input[name="vsize"]:checked') || {}).value || "60x83";
   let ROWS = [];
 
   // ---- decrypt the vendor catalog and hand it to the shared search engine ----
@@ -95,7 +97,16 @@
     refreshPrintBtn();
   }
 
-  const buildDoc = (r) => window.LabelRender.buildLabelDoc(r, SIZE);
+  const buildDoc = (r) => window.LabelRender.buildLabelDoc(r, vsize());
+
+  // restore + persist the sticker-size choice
+  (function () {
+    let saved = null; try { saved = localStorage.getItem(VSIZE_KEY); } catch (e) {}
+    if (saved) { const el = document.querySelector('input[name="vsize"][value="' + saved + '"]'); if (el) el.checked = true; }
+    document.querySelectorAll('input[name="vsize"]').forEach((r) => r.addEventListener("change", () => {
+      if (r.checked) { try { localStorage.setItem(VSIZE_KEY, r.value); } catch (e) {} }
+    }));
+  })();
 
   // ---- preview / download ----
   function preview(i) {
@@ -191,7 +202,7 @@
     if (!LP || !LP.isConnected()) { $("qzInfo").innerHTML = '<span style="color:var(--warn)">Click “Connect printer” first.</span>'; $("printCard").scrollIntoView({ behavior: "smooth" }); return; }
     applyOffset();
     const printer = $("qzPrinter").value || LP.savedPrinter();
-    const T = window.TSCLabel, sizeMm = window.LabelRender.sizeOf(SIZE);
+    const T = window.TSCLabel, sizeMm = window.LabelRender.sizeOf(vsize());
     $("genMsg").textContent = "Preparing " + rows.length + " label(s)…";
     try {
       const parts = [T.bitmapHeader(sizeMm, T.prod.gap)];
