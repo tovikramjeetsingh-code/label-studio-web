@@ -39,6 +39,8 @@
           }
           if (/PackLog\s*#/i.test(line)) meta.packlog = (line.match(/PackLog\s*#\s*(\S+)/i) || [])[1] || "";
           if (/^Warehouse:/i.test(line)) meta.warehouse = line.replace(/^Warehouse:\s*/i, "").trim();
+          if (!meta.created) { const mcd = line.match(/Created on:\s*(.+)/i); if (mcd) meta.created = mcd[1].replace(/\s{2,}.*$/, "").trim(); }
+          if (!meta.channel) { const mc = line.match(/(Myntra[\w .\-/]*Account)/i); if (mc) meta.channel = mc[1].trim(); }
           if (/^Total\b/i.test(toks[0] || "")) return;      // footer totals row
 
           // a data row ends in four integers: Good, Bad, Picked, Not Found
@@ -163,5 +165,80 @@
     return out;
   }
 
-  window.Picklist = { parsePicklist, buildPicklistDoc, buildPicklistPages, rowsPerPage, size: DEF };
+  // ---- split by floor: one full-page A4 picklist per floor --------------
+  // Rack formats seen in the OMS export all encode the floor somewhere:
+  // FL-04-Zone-…, SW-FL-01-…, Floor_2-…, or plain "Ground".
+  function floorOf(rack) {
+    const s = String(rack || "");
+    const m = s.match(/FL[-_ ]?0*(\d+)/i) || s.match(/Floor[-_ ]?0*(\d+)/i);
+    if (m) return "FL-" + String(parseInt(m[1], 10)).padStart(2, "0");
+    if (/ground/i.test(s)) return "Ground";
+    return "Other";
+  }
+  // natural sort so a rack run walks 006 < 016 < 023 … not lexically
+  const natKey = (s) => String(s).split(/(\d+)/)
+    .map((x) => (/^\d+$/.test(x) ? x.padStart(6, "0") : x.toLowerCase())).join("");
+  function groupByFloor(rows) {
+    const g = {};
+    rows.forEach((r) => { const f = floorOf(r.rack); (g[f] = g[f] || []).push(r); });
+    Object.values(g).forEach((list) => list.sort((a, b) => natKey(a.rack) < natKey(b.rack) ? -1 : natKey(a.rack) > natKey(b.rack) ? 1 : 0));
+    const rank = (k) => k === "Ground" ? 900 : k === "Other" ? 999 : parseInt(k.replace("FL-", ""), 10);
+    return Object.keys(g).sort((a, b) => rank(a) - rank(b)).map((k) => ({ floor: k, rows: g[k] }));
+  }
+
+  // A full A4 picklist (header + Sr/SkuCode/Rack/Qty/Picked/Not-Found table) for
+  // one floor's rows. Paginates and repeats the column header per page.
+  function buildFloorPicklistDoc(meta, floorLabel, rows) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+    const PW = 210, PH = 297, m = 12, right = PW - m;
+    const cols = [
+      { k: "sr", t: "Sr", w: 12, c: true }, { k: "sku", t: "SkuCode", w: 60 },
+      { k: "rack", t: "Rack Space", w: 60 }, { k: "qty", t: "Qty", w: 16, c: true },
+      { k: "pk", t: "Picked", w: 19, c: true }, { k: "nf", t: "Not Found", w: 19, c: true },
+    ];
+    let xx = m; cols.forEach((c) => { c.x = xx; xx += c.w; });
+    const units = rows.reduce((n, r) => n + (r.qty || 0), 0);
+    const rowH = 6.4, headH = 7.5;
+
+    function titleBlock() {
+      let y = m + 7;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(0);
+      doc.text("PICKLIST — " + floorLabel, m, y); y += 6.5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(70);
+      const l1 = [meta.packlog ? "PackLog #" + meta.packlog : "", meta.warehouse, meta.channel].filter(Boolean).join("   ·   ");
+      if (l1) { doc.text(l1, m, y); y += 4.3; }
+      const l2 = [meta.created ? "Created " + meta.created : "", rows.length + " lines · " + units + " units", "Picker: ______________"].filter(Boolean).join("   ·   ");
+      doc.text(l2, m, y); doc.setTextColor(0); return y + 4.5;
+    }
+    function colHead(y) {
+      doc.setFillColor(34, 34, 34); doc.rect(m, y, right - m, headH, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(255);
+      cols.forEach((c) => doc.text(c.t, c.c ? c.x + c.w / 2 : c.x + 1.8, y + headH / 2 + 1.4, c.c ? { align: "center" } : undefined));
+      doc.setTextColor(0); return y + headH;
+    }
+    let y = colHead(titleBlock());
+    rows.forEach((r, i) => {
+      if (y + rowH > PH - m) { doc.addPage(); y = colHead(m + 2); }
+      if (i % 2) { doc.setFillColor(244, 244, 244); doc.rect(m, y, right - m, rowH, "F"); }
+      const v = { sr: String(i + 1), sku: r.sku, rack: r.rack, qty: String(r.qty), pk: "", nf: "" };
+      cols.forEach((c) => {
+        let txt = v[c.k] || "";
+        doc.setFont("helvetica", c.k === "sku" ? "bold" : "normal");
+        let fs = c.k === "qty" ? 10.5 : (c.k === "sku" ? 9.5 : 9); doc.setFontSize(fs);
+        while (txt && doc.getTextWidth(txt) > c.w - 3 && fs > 6) { fs -= 0.3; doc.setFontSize(fs); }
+        const ty = y + rowH / 2 + 1.3;
+        if (c.c) doc.text(txt, c.x + c.w / 2, ty, { align: "center" }); else doc.text(txt, c.x + 1.8, ty);
+      });
+      doc.setDrawColor(180); doc.setLineWidth(0.2); doc.rect(m, y, right - m, rowH);
+      cols.forEach((c) => { if (c.x > m) doc.line(c.x, y, c.x, y + rowH); });
+      y += rowH;
+    });
+    return doc;
+  }
+
+  window.Picklist = {
+    parsePicklist, buildPicklistDoc, buildPicklistPages, rowsPerPage, size: DEF,
+    floorOf, groupByFloor, buildFloorPicklistDoc,
+  };
 })();

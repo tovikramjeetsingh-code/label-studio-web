@@ -800,6 +800,25 @@
     a.download = "picklist-" + (PICK.meta.picklist || "4x6") + ".pdf";
     document.body.appendChild(a); a.click(); a.remove();
   });
+  $("pickFloorZip").addEventListener("click", async () => {
+    if (!PICK) return;
+    const groups = window.Picklist.groupByFloor(PICK.rows);
+    if (!groups.length) { $("pickToast").innerHTML = '<div class="toast err">✕ No rack/floor data found.</div>'; return; }
+    $("pickToast").innerHTML = '<div class="toast">Splitting into ' + groups.length + ' floor picklist(s)…</div>';
+    const base = "Picklist-" + (PICK.meta.packlog || PICK.meta.picklist || "byfloor").replace(/[^\w.-]+/g, "");
+    const zip = new JSZip();
+    for (const g of groups) {
+      const doc = window.Picklist.buildFloorPicklistDoc(PICK.meta, g.floor, g.rows);
+      zip.file(base + "_" + g.floor + ".pdf", doc.output("blob"));
+      await sleep(0);
+    }
+    const out = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(out); a.download = base + "_by-floor.zip";
+    document.body.appendChild(a); a.click(); a.remove();
+    const summ = groups.map((g) => g.floor + " (" + g.rows.length + ")").join(", ");
+    $("pickToast").innerHTML = '<div class="toast ok-toast">✓ ' + groups.length + ' floor picklist(s): ' + esc(summ) + '. ZIP downloaded.</div>';
+  });
   $("pickPrint").addEventListener("click", async () => {
     if (!PICK) return;
     if (!printConnected()) {
