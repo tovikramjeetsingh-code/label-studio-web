@@ -819,6 +819,28 @@
     const summ = groups.map((g) => g.floor + " (" + g.rows.length + ")").join(", ");
     $("pickToast").innerHTML = '<div class="toast ok-toast">✓ ' + groups.length + ' floor picklist(s): ' + esc(summ) + '. ZIP downloaded.</div>';
   });
+  // open a PDF blob and print it (hidden iframe; opens a tab if the print is blocked)
+  function printPdfBlob(url) {
+    const ifr = document.createElement("iframe");
+    ifr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    ifr.src = url;
+    ifr.onload = () => setTimeout(() => {
+      try { ifr.contentWindow.focus(); ifr.contentWindow.print(); }
+      catch (e) { window.open(url, "_blank"); }
+    }, 400);
+    document.body.appendChild(ifr);
+  }
+  const floorDoc = () => PICK && window.Picklist.buildFloorPicklistCombined(PICK.meta, window.Picklist.groupByFloor(PICK.rows));
+  $("pickFloorPreview").addEventListener("click", () => {
+    const doc = floorDoc(); if (!doc) return;
+    $("pvFrame").src = doc.output("bloburl");   // the PDF viewer shows it page by page
+    $("modal").style.display = "flex";
+  });
+  $("pickFloorPrint").addEventListener("click", () => {
+    const doc = floorDoc(); if (!doc) return;
+    printPdfBlob(doc.output("bloburl"));
+    $("pickToast").innerHTML = '<div class="toast ok-toast">🖨 Sent the floor picklists to your printer’s dialog.</div>';
+  });
   $("pickPrint").addEventListener("click", async () => {
     if (!PICK) return;
     if (!printConnected()) {

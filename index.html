@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Label Studio</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
-<link rel="stylesheet" href="style.css?v=56">
+<link rel="stylesheet" href="style.css?v=57">
 </head>
 <body>
 
@@ -83,7 +83,7 @@
       <b>4 × 6 inch</b> sticker listing <b>SKU · RACK · QTY</b> in the order the report gives them, which is already
       grouped by rack so the picker walks the aisle in order. Long picklists continue onto further stickers,
       <span id="pickPerPage">25</span> lines each. <b>QTY</b> is the report's <b>Good</b> column — it sums to the picklist total.<br>
-      <b>Split by floor:</b> <b>⬇ Split by floor (ZIP)</b> gives one full-page A4 picklist per floor (FL-01, FL-02… + Ground), each sorted in rack walk-order with Picked / Not-Found columns — handles <code>FL-04-…</code>, <code>SW-FL-01-…</code>, <code>Floor_2-…</code> and <code>Ground</code>.</div>
+      <b>Split by floor:</b> <b>Preview</b> shows all floors page-by-page in the app, <b>Print</b> sends them to a printer, and <b>ZIP</b> downloads one A4 picklist per floor (FL-01, FL-02… + Ground) — each sorted in rack walk-order with Picked / Not-Found columns. Handles <code>FL-04-…</code>, <code>SW-FL-01-…</code>, <code>Floor_2-…</code> and <code>Ground</code>.</div>
     <div class="sub hidden" id="helpBox">Upload the <b>tax invoice PDF</b> (one or several). Each becomes a
       <b>4 × 6 inch</b> carton sticker carrying the <b>Invoice No.</b> and the <b>STN</b> — the invoice prints it
       as <b>STR No.</b> — both in large type and as scannable barcodes, with the date, STN type/status
@@ -213,7 +213,11 @@
       <button class="btn ghost" id="pickPreview">Preview sticker</button>
       <button class="btn primary" id="pickPrint">Print stickers</button>
       <button class="btn ghost" id="pickZip">Download PDF</button>
-      <button class="btn ghost" id="pickFloorZip">⬇ Split by floor (ZIP)</button>
+      <span style="width:1px;height:22px;background:#d7dbe3;margin:0 2px"></span>
+      <b style="font-size:12.5px;color:var(--muted)">By floor:</b>
+      <button class="btn ghost" id="pickFloorPreview">👁 Preview</button>
+      <button class="btn primary" id="pickFloorPrint">🖨 Print</button>
+      <button class="btn ghost" id="pickFloorZip">⬇ ZIP</button>
     </div>
     <div class="tbl-wrap">
       <table id="pickTbl">
@@ -334,17 +338,17 @@
 <script src="vendor/qz-tray.js"></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-<script src="assets/config.js?v=56"></script>
-<script src="assets/reference.enc.js?v=56"></script>
-<script src="assets/items.enc.js?v=56"></script>
-<script src="assets/parse.js?v=56"></script>
-<script src="assets/label.js?v=56"></script>
-<script src="assets/itemlabel.js?v=56"></script>
-<script src="assets/picklist.js?v=56"></script>
-<script src="assets/boxlabel.js?v=56"></script>
-<script src="assets/tsc.js?v=56"></script>
-<script src="assets/qz-cert.js?v=56"></script>
-<script src="assets/print.js?v=56"></script>
-<script src="assets/app.js?v=56"></script>
+<script src="assets/config.js?v=57"></script>
+<script src="assets/reference.enc.js?v=57"></script>
+<script src="assets/items.enc.js?v=57"></script>
+<script src="assets/parse.js?v=57"></script>
+<script src="assets/label.js?v=57"></script>
+<script src="assets/itemlabel.js?v=57"></script>
+<script src="assets/picklist.js?v=57"></script>
+<script src="assets/boxlabel.js?v=57"></script>
+<script src="assets/tsc.js?v=57"></script>
+<script src="assets/qz-cert.js?v=57"></script>
+<script src="assets/print.js?v=57"></script>
+<script src="assets/app.js?v=57"></script>
 </body>
 </html>

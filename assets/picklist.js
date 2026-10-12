@@ -186,11 +186,10 @@
     return Object.keys(g).sort((a, b) => rank(a) - rank(b)).map((k) => ({ floor: k, rows: g[k] }));
   }
 
-  // A full A4 picklist (header + Sr/SkuCode/Rack/Qty/Picked/Not-Found table) for
-  // one floor's rows. Paginates and repeats the column header per page.
-  function buildFloorPicklistDoc(meta, floorLabel, rows) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  // Draw one floor's A4 picklist (header + Sr/SkuCode/Rack/Qty/Picked/Not-Found
+  // table) into `doc`, starting on its current page; paginates and repeats the
+  // column header. Used for both a single-floor doc and the combined doc.
+  function drawFloorInto(doc, meta, floorLabel, rows) {
     const PW = 210, PH = 297, m = 12, right = PW - m;
     const cols = [
       { k: "sr", t: "Sr", w: 12, c: true }, { k: "sku", t: "SkuCode", w: 60 },
@@ -219,7 +218,7 @@
     }
     let y = colHead(titleBlock());
     rows.forEach((r, i) => {
-      if (y + rowH > PH - m) { doc.addPage(); y = colHead(m + 2); }
+      if (y + rowH > PH - m) { doc.addPage("a4", "portrait"); y = colHead(m + 2); }
       if (i % 2) { doc.setFillColor(244, 244, 244); doc.rect(m, y, right - m, rowH, "F"); }
       const v = { sr: String(i + 1), sku: r.sku, rack: r.rack, qty: String(r.qty), pk: "", nf: "" };
       cols.forEach((c) => {
@@ -234,11 +233,21 @@
       cols.forEach((c) => { if (c.x > m) doc.line(c.x, y, c.x, y + rowH); });
       y += rowH;
     });
+  }
+  const newA4 = () => new window.jspdf.jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  function buildFloorPicklistDoc(meta, floorLabel, rows) {
+    const doc = newA4(); drawFloorInto(doc, meta, floorLabel, rows); return doc;
+  }
+  // All floors in ONE doc, each starting on a new page — for in-app preview and
+  // printing the whole set in one go.
+  function buildFloorPicklistCombined(meta, groups) {
+    const doc = newA4();
+    groups.forEach((g, i) => { if (i > 0) doc.addPage("a4", "portrait"); drawFloorInto(doc, meta, g.floor, g.rows); });
     return doc;
   }
 
   window.Picklist = {
     parsePicklist, buildPicklistDoc, buildPicklistPages, rowsPerPage, size: DEF,
-    floorOf, groupByFloor, buildFloorPicklistDoc,
+    floorOf, groupByFloor, buildFloorPicklistDoc, buildFloorPicklistCombined,
   };
 })();
